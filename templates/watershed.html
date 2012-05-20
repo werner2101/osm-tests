@@ -1,0 +1,51 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+  <head>
+    <title>OSM Waterway Relation List</title>
+    <style type="text/css">
+      table { border:1px solid grey; empty-cells:show; }
+      th { border:1px solid grey; background:#BBBBBB; }
+      td { border:1px solid grey; }
+    </style>
+  </head>
+
+  <body>
+    <small>last update: $DATE</small>
+    <hr>
+    <h2>OSM Waterway Relation List </h2> 
+
+    <h3> Statistic </h3>
+    <b>Number of relations:</b> $RELATION_COUNT <br>
+    <b>Ways inside relations:</b> $WAY_RELATIONS <br>
+    <b>Way interconnection nodes:</b> $CONNECTIONS <br>
+    
+    <h3>Table</h3>
+
+    <table>
+        <tr>
+          <th> level</th>
+          <th> relation (details)</th>
+          <th> name</th>
+          <th> reference</th>
+	  <th> destination / tributary_of</th>
+	  <th> way members </th>
+	  <th> downstream relations</th>
+	  <th> upstream relations</th>
+	  <th> down ways </th>
+	  <th> up ways </th>
+        </tr>
+
+<!-- ROWS replacement start -->
+$ROWS
+<!-- ROWS replacement end -->
+
+    </table>
+    
+    <hr>
+    <address><a href="mailto:werner.ho@gmx.de">Werner Hoch</a></address>
+<!-- Created: Fri Jun 12 07:37:16 CEST 2009 -->
+<!-- hhmts start -->
+Last modified: Sat Dec 25 10:26:06 CET 2010
+<!-- hhmts end -->
+  </body>
+</html>
