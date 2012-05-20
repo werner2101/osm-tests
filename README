@@ -1,0 +1,20 @@
+this repository contains some test scripts for osm data.
+
+This repository relies on my other repository python-osm
+(https://github.com/werner2101/python-osm) which provices generic
+tools for osm data.
+
+Test scripts in this repository:
+
+watershed analyses
+=================
+
+Analyses the waterways and waterway relations (type=waterway) and builds
+connection data, watershed trees, ...
+
+
+relation type analyses and statistics
+=====================================
+
+Analyses the usage of relation types. See http://www.h-renrew.de/h/osm/osmchecks/02_Relationstypen/index.html for the results.
+
