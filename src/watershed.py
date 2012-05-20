@@ -8,6 +8,14 @@ import numpy
 
 sys.path.append('../python-osm/src/')
 from osm import pyosm
+
+
+#################### CONSTANTS
+BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__),'../'))
+TEMPLATEDIR = os.path.join(BASEDIR, 'templates')
+
+
+
 #################### CLASSES
 
 class WaterwayRelationScanner(object):
@@ -62,17 +70,13 @@ class WaterwayRelationScanner(object):
 
         return data[ind[lower:upper]]
             
-        
-
     def scan(self):
         rows = []
         level = 5
         
-        relations_up = open(os.path.join(os.path.dirname(__file__),'relations_up.txt'),'wt')
+        relations_up = open(os.path.join(self.outdir,'relations_up.txt'),'wt')
         
         for relid, rel in sorted(self.osm.relations.items()):
-#            if relid != 1162834:
-#                continue
             print 'scanning:', relid, rel.tags.get('name', '')
 
             stat, up, down= self.scan_single(relid)
@@ -98,8 +102,7 @@ class WaterwayRelationScanner(object):
                 col = ''
             rows.append('<tr%s>\n' %col + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
 
-        template = string.Template(open(os.path.join(os.path.dirname(__file__),
-                                                     'templates','watershed.html')).read())
+        template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed.html')).read())
         subst = {'ROWS': '\n'.join(rows).encode('ascii','xmlcharrefreplace'),
                  'DATE': time.strftime("%Y-%m-%d"),
                  'CONNECTIONS':str(len(self.conn)),
@@ -107,9 +110,7 @@ class WaterwayRelationScanner(object):
                  'WAY_RELATIONS': str(len(self.wayrel))}
         filename = os.path.join(self.outdir, 'index.html')
         open(filename,'wt').write(template.safe_substitute(subst))
-        
-            
-
+ 
     def scan_single(self,relid):
         upstream_relations = set([])
         downstream_relations = set([])
@@ -125,7 +126,6 @@ class WaterwayRelationScanner(object):
                 upstream_relations.update(set([rw[0] for rw in relway]))
         upstream_relations.discard(relid)
 
-#        visited_ways.update(set(relways))
         visited_ways = set([])
         ## multilevel upstream
         for w in relways:
@@ -136,7 +136,6 @@ class WaterwayRelationScanner(object):
                 if sw in visited_ways:
                     continue
                 visited_ways.add(sw)
-#                print 'upstream', sw, len(visited_ways), len(upstream_stack)
                 for dest, src, n in self.index_lookup(self.conn, self.conn_dest_ind, sw):
                     relway = self.index_lookup(self.wayrel, self.wayrel_wayind, src)
                     if not len(relway):
@@ -163,7 +162,6 @@ class WaterwayRelationScanner(object):
                 if sw in visited_ways:
                     continue
                 visited_ways.add(sw)
-#                print 'downstream', sw, len(visited_ways), len(downstream_stack)
                 for dest, src, n in self.index_lookup(self.conn, self.conn_src_ind, sw):
                     relway = self.index_lookup(self.wayrel, self.wayrel_wayind, dest)
                     if not len(relway):
@@ -173,7 +171,6 @@ class WaterwayRelationScanner(object):
                     else:
                         pass
         
-        ## print single
         upstream_items = []
         for r in upstream_relations:
             t = self.osm.relations[r].tags
@@ -200,8 +197,7 @@ class WaterwayRelationScanner(object):
                 downstream_rows.append(row)
                 downstream_way_count += len(v)
 
-        template = string.Template(open(os.path.join(os.path.dirname(__file__),
-                                                     'templates','waterway.html')).read())
+        template = string.Template(open(os.path.join(TEMPLATEDIR, 'waterway.html')).read())
 
         subst = {'RELATION': str(relid),
                  'NAME': self.xmlenc(relation.tags.get('name', '')),
@@ -325,8 +321,6 @@ class WaterwayRelationScanner(object):
         return ' '.join(links)
 
 
-
-
 class OsmWaterwayFilter(handler.ContentHandler):
     def __init__(self, write_handler):
         self.write_handler = write_handler
@@ -382,7 +376,8 @@ class OsmWaterwayFilter(handler.ContentHandler):
         self.write_handler.endElement(tag)
         self.write_handler.characters('\n')
 
-class OsmWayNodes(handler.ContentHandler):
+
+class OsmTableCreator(handler.ContentHandler):
     def __init__(self, outfiles, relfile):
         self.NFILES = len(outfiles)
         self.files = outfiles
@@ -404,21 +399,20 @@ class OsmWayNodes(handler.ContentHandler):
         if obj == 'member':
             if attrs['type'] == 'way':
                 self.current_ways.append(int(attrs['ref']))
-                
 
     def endElement(self, obj):
         if obj == 'way':
-            poslist = [0] + [1]*(len(self.current_nodes)-2) + [2]
+            poslist = numpy.arange(len(self.current_nodes))+1
+            poslist[-1] = -1  #mark the last node
             for nodeid, pos in zip(self.current_nodes, poslist):
+                # hashsorting: key is the remainder of the modulo operator
                 currentfile = self.files[nodeid % self.NFILES]
                 currentfile.write('%i\t%i\t%i\n' %(nodeid, self.current_wayid, pos))
         if obj == 'relation':
             for member in self.current_ways:
                 self.relfile.write('%i\t%i\n' %(self.current_relid, member))
-            
-        
 
-
+#################### FUNCTIONS
 def waterwayfilter(outfile):
     outfile = open(outfile, 'wt')
     write_handler = xml.sax.saxutils.XMLGenerator(outfile, 'UTF-8')
@@ -437,20 +431,26 @@ def waterwayfilter(outfile):
     write_handler.endDocument()
 
 
-def waynodes(outdir):
+def createtables(outdir):
+    ## 1st level hashsorting the output
+    ## number of files use to split the output 
     NFILES = 100
-    waynode_filenames =  [outdir+'waynode_' + str(n)  for n in range(NFILES)]
+    waynode_filenames =  [os.path.join(outdir,'waynode_' + str(n))  for n in range(NFILES)]
 
     outfiles = [open(f,'wt') for f in waynode_filenames]
-    relfile = open(outdir+'relation_way', 'wt')
-    osm_handler = OsmWayNodes(outfiles, relfile)
+    relfile = open(os.path.join(outdir,'relation_way'), 'wt')
+    osm_handler = OsmTableCreator(outfiles, relfile)
     parser = make_parser()
     parser.setContentHandler(osm_handler)
     parser.parse(sys.stdin)
 
     for f in outfiles:
         f.close()
-        
+
+    ## find all connections of waterways and create tables
+    # different output tables, currently only the connection file is used for analyses
+    # FIXME: maybe use only one table (nodeid, wayid, index of node in way) like the raw tables
+    #        current format is (destway, srcway, nodeid)
     dest_file = open(outdir+'destinations','wt')
     con_file =  open(outdir+'connections', 'wt')
     source_file = open(outdir+'sources','wt')
@@ -495,12 +495,12 @@ def waynodes(outdir):
 
             lastnodeid = nodeid
             nodeid, wayid, conn = m[i]
-            if conn == 0:
+            if conn == 1:
                 srcind.append(i)
-            elif conn == 1:
-                midind.append(i)
-            else:
+            elif conn == -1:
                 destind.append(i)
+            else:
+                midind.append(i)
 
     dest_file.close()
     con_file.close()
@@ -508,14 +508,26 @@ def waynodes(outdir):
     ee_file.close()
     ss_file.close()
 
+
 #################### MAIN
+## split up the analyses in different tasks
+# usage: program command [args]
 
 if sys.argv[1] == 'filter':
-    waterwayfilter(sys.argv[2])
-if sys.argv[1] == 'waynodes':
-    waynodes(sys.argv[2])
-if sys.argv[1] == 'relations':
-    scanner = WaterwayRelationScanner(sys.argv[2], sys.argv[3], sys.argv[4])
+    # input is stdin
+    outfile = sys.argv[2]
+    waterwayfilter(outfile)
+
+if sys.argv[1] == 'createtables':
+    # input is sys.stdin
+    tabledir = sys.argv[2]
+    createtables(tabledir)
+
+if sys.argv[1] == 'analyse':
+    tabledir = sys.argv[2]
+    outdir = sys.argv[3]
+    infile = sys.argv[4]  ## waterway relations
+    scanner = WaterwayRelationScanner(tabledir, outdir, infile)
     scanner.scan()
 
 
