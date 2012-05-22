@@ -6,6 +6,8 @@ from xml.sax import handler, make_parser
 import xml.sax.saxutils
 import numpy
 
+import watershed_config
+
 sys.path.append('../python-osm/src/')
 from osm import pyosm
 
@@ -25,6 +27,7 @@ class WaterwayRelationScanner(object):
         print 'loading osm file ...'
         self.osm = pyosm.OSMXMLFile(osmfile)
         self.osm.statistic()
+        self.upstream_dict = {}
 
         print 'load connection table ...'
         self.conn = numpy.loadtxt(indir+'connections', dtype='int32')
@@ -75,11 +78,13 @@ class WaterwayRelationScanner(object):
         level = 5
         
         relations_up = open(os.path.join(self.outdir,'relations_up.txt'),'wt')
-        
+
+        rows = {}
         for relid, rel in sorted(self.osm.relations.items()):
             print 'scanning:', relid, rel.tags.get('name', '')
 
             stat, up, down= self.scan_single(relid)
+            self.upstream_dict[relid] = up
 
             relations_up.write('%d=%s\n' %(relid, ' '.join([str(u) for u in up])))
 
@@ -95,22 +100,44 @@ class WaterwayRelationScanner(object):
             row.append(str(len(up)))
             row.append(str(stat['downstream_ways']))
             row.append(str(stat['upstream_ways']))
-                       
+            rows[relid] = row
+
+        tree = self.traverse_relations()
+        htmlrows = []
+        for relid, level, status in tree:
+            row = rows[relid]
+            row[0] = '<pre>'+'.'*(level-1) + str(level) + '</pre>'
             if level == 1:
                 col = ' bgcolor="#7777FF"' if status else ' bgcolor="#FF7777"'
             else:
                 col = ''
-            rows.append('<tr%s>\n' %col + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
+            htmlrows.append('<tr%s>\n' %col + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
 
-        template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed.html')).read())
-        subst = {'ROWS': '\n'.join(rows).encode('ascii','xmlcharrefreplace'),
+        template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_hierarchical.html')).read())
+        subst = {'ROWS': '\n'.join(htmlrows).encode('ascii','xmlcharrefreplace'),
                  'DATE': time.strftime("%Y-%m-%d"),
                  'CONNECTIONS':str(len(self.conn)),
                  'RELATION_COUNT': str(len(self.osm.relations)),
                  'WAY_RELATIONS': str(len(self.wayrel))}
-        filename = os.path.join(self.outdir, 'index.html')
+        filename = os.path.join(self.outdir, 'hierarchical.html')
         open(filename,'wt').write(template.safe_substitute(subst))
- 
+
+        count = 1
+        htmlrows = []
+        for relid, row in sorted(rows.items()):
+            row[0] = str(count)
+            count += 1
+            htmlrows.append('<tr%s>\n' %col + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
+
+        template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_flat.html')).read())
+        subst = {'ROWS': '\n'.join(htmlrows).encode('ascii','xmlcharrefreplace'),
+                 'DATE': time.strftime("%Y-%m-%d"),
+                 'CONNECTIONS':str(len(self.conn)),
+                 'RELATION_COUNT': str(len(self.osm.relations)),
+                 'WAY_RELATIONS': str(len(self.wayrel))}
+        filename = os.path.join(self.outdir, 'flat.html')
+        open(filename,'wt').write(template.safe_substitute(subst))
+
     def scan_single(self,relid):
         upstream_relations = set([])
         downstream_relations = set([])
@@ -227,71 +254,50 @@ class WaterwayRelationScanner(object):
     def xmlenc(self, str_):
         return str_.encode('ascii','xmlcharrefreplace')
 
-    def travers_relations(self, config, filename, area):
+    def traverse_relations(self):
         rel_tree = []
-        ways = set(self.ways.keys())
-        rels = set(self.relations.keys())
+        upstream_dict = {}
+        upstream_dict.update(self.upstream_dict)  ##local copy
+        visited = set([])
 
-        df = {}
-        for k,v in config.items('dont_follow'):
-            df[int(k)] = set([int(i) for i in v.split(',')])
+        dest = set(upstream_dict.keys())
+        for k,v in upstream_dict.items():
+            dest -= set(v)
 
-        l = []
-        for k,v in config.items('start_relations'):
-            l.append((int(v.split(',')[0]),k))
-        l.sort()
-
-        for v,k in l:
-            if int(k) in self.relations:
-                rel_tree.append([int(k),1,True])
-                rels.remove(int(k))
-            else:
-                print k, 'not in self.relations'
+        for country, rivers in sorted(watershed_config.dest.items()):
+            for river in rivers:
+                if river in upstream_dict:
+                    rel_tree.append([river,1,True])
+                    visited.add(river)
+                
 
         cursor = len(rel_tree)
         last_len = cursor
         while True:
             cursor -= 1
             if cursor == -1:
-                if len(rels) == 0:
+                if len(upstream_dict) == 0:
                     break
                 if len(rel_tree) == last_len:
-                    rel_tree.append([rels.pop(),1,False])
+                    dest -= visited
+                    if len(dest):
+                        next_ = dest.pop()
+                    else:
+                        next_ = upstream_dict.keys()[0]
+                    rel_tree.append([next_,1,False])
+                    visited.add(next_)
                 last_len = len(rel_tree)
                 cursor = len(rel_tree) - 1
+
             rel, level, status = rel_tree[cursor]
-            neighbours = self.relations[rel][3] & rels
-            for n in neighbours:
-                if n not in df.get(rel, set([])):
-                    rel_tree.insert(cursor+1, [n, level+1, False])
-                    rels.discard(n)
-                else:
-                    print 'do not follow: ', rel, n
+            for sub in upstream_dict.get(rel,[]):
+                if sub not in visited:
+                    rel_tree.insert(cursor+1, [sub, level+1, False])
+                    visited.add(sub)
+            if rel in upstream_dict:
+                upstream_dict.pop(rel)
 
-        rows = []
-        for rel, level, status in rel_tree:
-            row = []
-            row.append('<pre>'+'.'*(level-1) + str(level) + '</pre>')
-            row.append('<a href="http://www.openstreetmap.org/browse/relation/%i">%i</a>' % (rel,rel))
-            row.append(self.relations[rel][1].get('name', '') + self.wikipedia_links(self.relations[rel][1]))
-            row.append(', '.join(['%s=%s' % (k,v) for k,v in self.relations[rel][1].items() if k.startswith('ref')]))
-            row.append(self.relations[rel][1].get('destination',''))
-            if level == 1:
-                col = ' bgcolor="#7777FF"' if status else ' bgcolor="#FF7777"'
-            else:
-                col = ''
-            rows.append('<tr%s>\n' %col + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
-
-        template = string.Template(open(os.path.join(os.path.dirname(__file__),
-                                                     'templates','watershed.html')).read())
-        subst = {'ROWS': '\n'.join(rows).encode('ascii','xmlcharrefreplace'),
-                 'DATE': time.strftime("%Y-%m-%d"),
-                 'AREA': area,
-                 'WAY_COUNT': str(len(self.ways)),
-                 'CONNECTION_NODES':str(len(self.connecting_nodes)),
-                 'RELATION_COUNT': str(len(self.relations)),
-                 'WAY_RELATIONS': str(len(self.way_relation))}
-        open(filename,'wt').write(template.safe_substitute(subst))
+        return rel_tree
 
     def wikipedia_links(self, tags):
         links = []
