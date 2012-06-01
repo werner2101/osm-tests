@@ -1,0 +1,47 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+  <head>
+    <title>OSM Relations Details</title>
+    <style type="text/css">
+      table { border:1px solid grey; empty-cells:show; }
+      th { border:1px solid grey; background:#BBBBBB; }
+      td { border:1px solid grey; }
+    </style>
+  </head>
+
+  <body>
+    <h2>Tag Hierarchie: $TAGHIERARCHY</h2> 
+
+    <h3>Tag Statistik</h3>
+
+    <table>
+        <tr>
+          <th> Tag</th>
+          <th> Anzahl</th>
+        </tr>
+        
+<!-- ROWS replacement start -->
+$STATROWS
+<!-- ROWS replacement end -->
+
+    </table>
+
+    <h3>Tags</h3>
+    $LIMIT_NOTE
+    <table>
+        
+<!-- ROWS replacement start -->
+$TAGHEAD
+$TAGROWS
+<!-- ROWS replacement end -->
+
+    </table>
+
+    <hr>
+    <address><a href="mailto:werner.ho@gmx.de">Werner Hoch</a></address>
+<!-- Created: Fri Jun 12 07:37:16 CEST 2009 -->
+<!-- hhmts start -->
+Last modified: Fri Jan 22 09:53:21 CET 2010
+<!-- hhmts end -->
+  </body>
+</html>
