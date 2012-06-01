@@ -127,7 +127,7 @@ class WaterwayRelationScanner(object):
         for relid, row in sorted(rows.items()):
             row[0] = str(count)
             count += 1
-            htmlrows.append('<tr%s>\n' %col + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
+            htmlrows.append('<tr>\n'  + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
 
         template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_flat.html')).read())
         subst = {'ROWS': '\n'.join(htmlrows).encode('ascii','xmlcharrefreplace'),
@@ -382,6 +382,47 @@ class OsmWaterwayFilter(handler.ContentHandler):
         self.write_handler.endElement(tag)
         self.write_handler.characters('\n')
 
+class OsmWaterwayLister(handler.ContentHandler):
+    def __init__(self,relwayfile):
+        self.relways = numpy.loadtxt(relwayfile, dtype='int32')
+        self.relways = set(self.relways[:,1])
+        print len(self.relways)
+        self.current_attrs = {}
+        self.node_count = 0
+        self.current_tags = {}
+        self.waterway_dict = {}
+        self.weighting = {}
+        
+        self.waterways = set(['river','stream','canal','drain','ditch','wadi'])
+        
+    def startElement(self, obj, attrs):
+        if obj == 'way':
+            self.current_attrs = dict(attrs)
+            self.node_count = 0
+            self.current_tags = {}
+        if obj == 'nd':
+            self.node_count += 1
+        if obj == 'tag':
+            self.current_tags[attrs['k']] = attrs['v']
+
+    def endElement(self, obj):
+        if obj == 'way':
+            wwtype = self.current_tags.get('waterway','x')
+            wwname = self.current_tags.get('name','')
+            if wwname and wwtype in self.waterways:
+                if int(self.current_attrs['id']) in self.relways:
+                    return
+                if wwtype == 'river':
+                    w = 20
+                else:
+                    w = 1
+                if wwname in self.waterway_dict:
+                    self.waterway_dict[wwname].append(self.current_attrs['id'])
+                    self.weighting[wwname] += w * self.node_count
+                else:
+                    self.waterway_dict[wwname] = [ self.current_attrs['id'] ]
+                    self.weighting[wwname] = w* self.node_count
+
 
 class OsmTableCreator(handler.ContentHandler):
     def __init__(self, outfiles, relfile):
@@ -436,6 +477,24 @@ def waterwayfilter(outfile):
     write_handler.endElement('osm')
     write_handler.endDocument()
 
+
+def waterwaylist(relwayfile, outfile):
+    osm_handler = OsmWaterwayLister(relwayfile)
+    parser = make_parser()
+    parser.setContentHandler(osm_handler)
+
+    parser.parse(sys.stdin)
+
+    outfile = open(outfile, 'wt')
+
+    vk = []
+    for k,v in osm_handler.weighting.items():
+        vk.append((v,k))
+
+    for weight, name in sorted(vk, reverse=True):
+        outfile.write(name.encode('ascii','xmlcharrefreplace') + '\t')
+        outfile.write(' '.join(osm_handler.waterway_dict[name]))
+        outfile.write('\n\n')
 
 def createtables(outdir):
     ## 1st level hashsorting the output
@@ -523,6 +582,12 @@ if sys.argv[1] == 'filter':
     # input is stdin
     outfile = sys.argv[2]
     waterwayfilter(outfile)
+
+if sys.argv[1] == 'waterwaylist':
+    # input is stdin
+    relwayfile = sys.argv[2]
+    outfile = sys.argv[3]
+    waterwaylist(relwayfile, outfile)
 
 if sys.argv[1] == 'createtables':
     # input is sys.stdin
