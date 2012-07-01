@@ -22,6 +22,21 @@ australia:
 
 	cat $(OSMFILES)au_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)au/waterwaylist.txt
 
+austria:
+	 ../python-osm/src/osm/osmdb.py \
+	  --ways_relations=/dev/stdout $(OSMFILES)austria.osm.bz2 | \
+	  ./src/watershed.py filter $(OSMFILES)at_waterways.osm
+
+	../python-osm/src/osm/osmdb.py \
+	  --relations=/dev/stdout $(OSMFILES)austria.osm.bz2 | \
+	  ./src/watershed.py filter $(OSMFILES)at_waterwayrelations.osm
+
+	cat $(OSMFILES)at_waterways.osm |./src/watershed.py createtables $(WATERSHED_TEMP)
+
+	./src/watershed.py analyse $(WATERSHED_TEMP) $(OUTDIR)at/ $(OSMFILES)at_waterwayrelations.osm
+
+	cat $(OSMFILES)at_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)at/waterwaylist.txt
+
 france:
 	../python-osm/src/osm/osmdb.py \
 	  --ways_relations=/dev/stdout $(OSMFILES)france.osm.bz2 | \
@@ -101,6 +116,7 @@ planet:
 	../python-osm/src/osm/osmdb.py \
 	  --ways_relations=/dev/stdout $(PLANET) | \
 	  ./src/watershed.py filter $(OSMFILES)planet_waterways.osm
+
 	../python-osm/src/osm/osmdb.py \
 	  --relations=/dev/stdout $(PLANET) | \
 	  ./src/watershed.py filter $(OSMFILES)planet_waterwayrelations.osm
