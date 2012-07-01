@@ -4,6 +4,7 @@
 import sys, string, re, time, os
 from xml.sax import handler, make_parser
 import xml.sax.saxutils
+import codecs
 import numpy
 
 import watershed_config
@@ -574,6 +575,28 @@ def createtables(outdir):
     ss_file.close()
 
 
+def role_check(osm, filename):
+    GOOD_ROLES = [('w', 'main_stream'), ('w',''), ('w','side_stream'), ('n','spring')]
+    fout = codecs.open(filename, 'wt', 'utf-8')
+    fout.write('\t'.join(['rel_id', 'name', 'type', 'role', 'count', 'bad']) + '\n')
+    for id, rel in sorted(osm.relations.items()):
+        role_type = {}
+        name = rel.tags.get('name','')
+        for otype, mid, role in rel.member_data:
+            k = (str(otype), role)
+            if k in role_type:
+                role_type[k] = role_type[k] + 1
+            else:
+                role_type[k] = 1
+
+        for tp_role, count in role_type.items():
+            roles = 'BAD'
+            if tp_role in GOOD_ROLES:
+                roles = 'good'
+            otype, role = tp_role
+            fout.write('\t'.join([str(id), name, otype, role, str(count), roles]) + '\n')
+
+
 #################### MAIN
 ## split up the analyses in different tasks
 # usage: program command [args]
@@ -600,6 +623,13 @@ if sys.argv[1] == 'analyse':
     infile = sys.argv[4]  ## waterway relations
     scanner = WaterwayRelationScanner(tabledir, outdir, infile)
     scanner.scan()
+
+if sys.argv[1] == 'roles':
+    # input is sys.stdin
+    outfile = sys.argv[2]
+    osm = pyosm.OSMXMLFile(sys.stdin)
+    role_check(osm, outfile)
+    
 
 
 

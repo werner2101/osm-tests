@@ -66,6 +66,8 @@ germany:
 
 	cat $(OSMFILES)de_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)de/waterwaylist.txt
 
+	cat $(OSMFILES)de_waterwayrelations.osm | ./src/watershed.py roles  $(OUTDIR)de/relationroles.txt
+
 italy:
 	../python-osm/src/osm/osmdb.py \
 	  --ways_relations=/dev/stdout $(OSMFILES)italy.osm.bz2 | \
@@ -124,3 +126,5 @@ planet:
 	cat $(OSMFILES)planet_waterways.osm |./src/watershed.py createtables $(WATERSHED_TEMP)
 
 	./src/watershed.py analyse $(WATERSHED_TEMP) $(OUTDIR)planet/ $(OSMFILES)planet_waterwayrelations.osm
+
+	cat $(OSMFILES)planet_waterwayrelations.osm | ./src/watershed.py roles  $(OUTDIR)planet/relationroles.txt
