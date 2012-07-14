@@ -282,7 +282,8 @@ class WaterwayRelationScanner(object):
                 if len(rel_tree) == last_len:
                     dest -= visited
                     if len(dest):
-                        next_ = dest.pop()
+                        next_ = sorted(dest)[0]
+                        dest.remove(next_)
                     else:
                         next_ = upstream_dict.keys()[0]
                     rel_tree.append([next_,1,False])
