@@ -83,6 +83,8 @@ italy:
 
 	cat $(OSMFILES)it_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)it/waterwaylist.txt
 
+	cat $(OSMFILES)it_waterwayrelations.osm | ./src/watershed.py roles  $(OUTDIR)it/relationroles.txt
+
 spain:
 	../python-osm/src/osm/osmdb.py \
 	  --ways_relations=/dev/stdout $(OSMFILES)spain.osm.bz2 | \
@@ -98,6 +100,8 @@ spain:
 
 	cat $(OSMFILES)es_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)es/waterwaylist.txt
 
+	cat $(OSMFILES)es_waterwayrelations.osm | ./src/watershed.py roles  $(OUTDIR)es/relationroles.txt
+
 switzerland:
 	../python-osm/src/osm/osmdb.py \
 	  --ways_relations=/dev/stdout $(OSMFILES)switzerland.osm.bz2 | \
@@ -112,6 +116,37 @@ switzerland:
 	./src/watershed.py analyse $(WATERSHED_TEMP) $(OUTDIR)ch/ $(OSMFILES)ch_waterwayrelations.osm
 
 	cat $(OSMFILES)ch_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)ch/waterwaylist.txt
+
+
+africa:
+	../python-osm/src/osm/osmdb.py \
+	  --ways_relations=/dev/stdout $(OSMFILES)africa.osm.bz2 | \
+	  ./src/watershed.py filter $(OSMFILES)africa_waterways.osm
+
+	../python-osm/src/osm/osmdb.py \
+	  --relations=/dev/stdout $(OSMFILES)africa.osm.bz2 | \
+	  ./src/watershed.py filter $(OSMFILES)africa_waterwayrelations.osm
+
+	cat $(OSMFILES)africa_waterways.osm |./src/watershed.py createtables $(WATERSHED_TEMP)
+
+	./src/watershed.py analyse $(WATERSHED_TEMP) $(OUTDIR)africa/ $(OSMFILES)africa_waterwayrelations.osm
+
+	cat $(OSMFILES)africa_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)africa/waterwaylist.txt
+
+south-america:
+	../python-osm/src/osm/osmdb.py \
+	  --ways_relations=/dev/stdout $(OSMFILES)south-america.osm.bz2 | \
+	  ./src/watershed.py filter $(OSMFILES)south-america_waterways.osm
+
+	../python-osm/src/osm/osmdb.py \
+	  --relations=/dev/stdout $(OSMFILES)south-america.osm.bz2 | \
+	  ./src/watershed.py filter $(OSMFILES)south-america_waterwayrelations.osm
+
+	cat $(OSMFILES)south-america_waterways.osm |./src/watershed.py createtables $(WATERSHED_TEMP)
+
+	./src/watershed.py analyse $(WATERSHED_TEMP) $(OUTDIR)south-america/ $(OSMFILES)south-america_waterwayrelations.osm
+
+	cat $(OSMFILES)south-america_waterways.osm | ./src/watershed.py waterwaylist $(WATERSHED_TEMP)relation_way $(OUTDIR)south-america/waterwaylist.txt
 
 
 planet:
