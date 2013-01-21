@@ -123,3 +123,11 @@ STATUS_COLORS = [('established', '#00FF00'),
                  ('strange', '#FF4444'),
                  ('deprecated', '#CCCCCC')
                  ]
+
+RELATION_ROLES = {'multipolygon': dict([('','wr'),('outer','wr'),('inner','wr'),
+                                        ('admin_centre','n'),('subarea','r'),('label','n')]),
+                  'waterway':dict([('','w'),('main_stream','w'),('side_stream','w'),
+                                   ('tributary','r'),('spring','n')]),
+                  'collection':dict([('','rwn')]),
+                  }
+                                      
