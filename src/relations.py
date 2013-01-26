@@ -183,7 +183,7 @@ def build_typestatus():
     return dd
 
 def waterway_relations_filter(object):
-    waterwayset = set(['waterway', 'stream', 'river', 'canal', 'drain','watershed','river_basin'])
+    waterwayset = set(['waterway', 'stream', 'river', 'canal', 'drain','watershed','river_basin','pipeline'])
     if type(object) == pyosm.Node:
         return False
     elif type(object) == pyosm.Way:
