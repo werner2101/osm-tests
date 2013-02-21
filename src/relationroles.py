@@ -25,7 +25,7 @@ class BadRolesFilter(handler.ContentHandler):
         self.current_object = None
         self.current_subobjects = []
         self.current_tags = {}
-        self.lines = ['\t'.join(['type', 'rel_id', 'name', 'object', 'role', 'count'])]
+        self.lines = ['\t'.join(['type', 'rel_id', 'name', 'role', 'obj', 'count'])]
 
         
     def startElement(self, obj, attrs):

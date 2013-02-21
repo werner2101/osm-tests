@@ -3,13 +3,15 @@
 OSMFILES="../../osm_files/"
 OUTDIR2="../../data/02_Relationstypen/"
 OUTDIR7="../../data/07_watershed/"
-PLANET="/osm/planet-latest.osm"
+PLANET="/store/osm/planet-latest.osm"
 
-WATERSHED_TEMP="/osm/waterway_temp/"
+WATERSHED_TEMP="/store/osm/waterway_temp/"
 
 
 #################### planet
 planet:
+	cat $(OSMFILES)planet_relations.osm | ./src/relationroles.py $(OUTDIR2)planet/relationroles.txt
+
 	../python-osm/src/osm/osmdb.py \
 	  --ways_relations=/dev/stdout $(PLANET) | \
 	  ./src/watershed.py filter $(OSMFILES)planet_waterways.osm
@@ -21,8 +23,6 @@ planet:
 	cat $(OSMFILES)planet_waterways.osm |./src/watershed.py createtables $(WATERSHED_TEMP)
 
 	./src/watershed.py analyse $(WATERSHED_TEMP) $(OUTDIR7)planet/ $(OSMFILES)planet_waterwayrelations.osm
-
-	cat $(OSMFILES)planet_waterwayrelations.osm | ./src/relationroles.py $(OUTDIR2)planet/relationroles.txt
 
 riverbank:
 	../python-osm/src/osm/osmdb.py \
