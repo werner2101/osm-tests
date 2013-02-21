@@ -335,7 +335,7 @@ class OsmWaterwayFilter(handler.ContentHandler):
         self.current_subobjects = []
         self.current_tags = {}
         self.types = set(['waterway'])
-        self.waterways = set(['river','stream','canal','drain','ditch','wadi'])
+        self.waterways = set(['river','stream','canal','drain','ditch','wadi','lakeconnector'])
         
     def startElement(self, obj, attrs):
         if obj == 'node':
@@ -394,7 +394,7 @@ class OsmWaterwayLister(handler.ContentHandler):
         self.waterway_dict = {}
         self.weighting = {}
         
-        self.waterways = set(['river','stream','canal','drain','ditch','wadi'])
+        self.waterways = set(['river','stream','canal','drain','ditch','wadi','lakeconnector'])
         
     def startElement(self, obj, attrs):
         if obj == 'way':
