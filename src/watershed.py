@@ -16,6 +16,7 @@ from osm import pyosm
 #################### CONSTANTS
 BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__),'../'))
 TEMPLATEDIR = os.path.join(BASEDIR, 'templates')
+PLANET_CONNECTIONS = os.path.join(BASEDIR,'../../data/07_watershed/planet/relations_up.txt')
 
 
 #################### CLASSES
@@ -35,12 +36,36 @@ class WaterwayRelationScanner(object):
         self.conn_dest_ind = numpy.argsort(self.conn[:,0]), 0
         self.conn_src_ind = numpy.argsort(self.conn[:,1]), 1
 
+        print 'load planet upstream table'
+        self.planet_destinations = self.load_planetconnections()
+
         print 'load way relation table ...'
         self.wayrel = numpy.loadtxt(indir+'relation_way', dtype='int32')
         print 'create way relation index ...'
         self.wayrel_relind = numpy.argsort(self.wayrel[:,0]), 0
         self.wayrel_wayind = numpy.argsort(self.wayrel[:,1]), 1
         print 'loading complete.'
+
+    def load_planetconnections(self):
+        upstream = {}
+        visited = set()
+        todo = set()
+
+        for line in open(PLANET_CONNECTIONS).readlines():
+            k,v = line.split('=',1)
+            upstream[int(k)] = set([int(i) for i in v.split()])
+        
+        for k,v in watershed_config.dest.items():
+            todo.update(v)
+
+        while todo:
+            x = todo.pop()
+            if x in visited:
+                continue
+            todo.update(upstream.get(x,set()))
+            visited.add(x)
+
+        return visited
 
     def index_lookup(self, data, index, value):
         ind, col = index
@@ -103,14 +128,15 @@ class WaterwayRelationScanner(object):
             rows[relid] = row
 
         tree = self.traverse_relations()
+        colors = {'dest':' bgcolor="#7777FF"',
+                  'planet':' bgcolor="#FFFF77"',
+                  'missing':' bgcolor="#FF7777"',
+                  'sub':''}
         htmlrows = []
         for relid, level, status in tree:
             row = rows[relid]
             row[0] = '<pre>'+'.'*(level-1) + str(level) + '</pre>'
-            if level == 1:
-                col = ' bgcolor="#7777FF"' if status else ' bgcolor="#FF7777"'
-            else:
-                col = ''
+            col = colors.get(status)
             htmlrows.append('<tr%s>\n' %col + '\n'.join(["  <td> %s </td>" %s for s in row]) + '</tr>\n')
 
         template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_hierarchical.html')).read())
@@ -267,7 +293,7 @@ class WaterwayRelationScanner(object):
         for country, rivers in sorted(watershed_config.dest.items()):
             for river in rivers:
                 if river in upstream_dict:
-                    rel_tree.append([river,1,True])
+                    rel_tree.append([river,1,'dest'])
                     visited.add(river)
                 
 
@@ -285,7 +311,10 @@ class WaterwayRelationScanner(object):
                         dest.remove(next_)
                     else:
                         next_ = upstream_dict.keys()[0]
-                    rel_tree.append([next_,1,False])
+                    if next_ in self.planet_destinations:
+                        rel_tree.append([next_,1,'planet'])
+                    else:
+                        rel_tree.append([next_,1,'missing'])
                     visited.add(next_)
                 last_len = len(rel_tree)
                 cursor = len(rel_tree) - 1
@@ -293,7 +322,7 @@ class WaterwayRelationScanner(object):
             rel, level, status = rel_tree[cursor]
             for sub in upstream_dict.get(rel,[]):
                 if sub not in visited:
-                    rel_tree.insert(cursor+1, [sub, level+1, False])
+                    rel_tree.insert(cursor+1, [sub, level+1, 'sub'])
                     visited.add(sub)
             if rel in upstream_dict:
                 upstream_dict.pop(rel)
@@ -335,7 +364,8 @@ class OsmWaterwayFilter(handler.ContentHandler):
         self.current_subobjects = []
         self.current_tags = {}
         self.types = set(['waterway'])
-        self.waterways = set(['river','stream','canal','drain','ditch','wadi','lakeconnector'])
+        self.waterways = set(['river','stream','canal','drain','ditch',
+                              'wadi','lakeconnector','derelict_canal'])
         
     def startElement(self, obj, attrs):
         if obj == 'node':
@@ -394,7 +424,8 @@ class OsmWaterwayLister(handler.ContentHandler):
         self.waterway_dict = {}
         self.weighting = {}
         
-        self.waterways = set(['river','stream','canal','drain','ditch','wadi','lakeconnector'])
+        self.waterways = set(['river','stream','canal','drain','ditch',
+                              'wadi','lakeconnector','derelict_canal'])
         
     def startElement(self, obj, attrs):
         if obj == 'way':
