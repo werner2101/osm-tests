@@ -136,6 +136,8 @@ RELATION_ROLES = {'multipolygon': dict([('','wr'),('outer','wr'),('inner','wr'),
                   'waterway':dict([('','w'),('main_stream','w'),('side_stream','w'),
                                    ('tributary','r'),('spring','n')]),
                   'collection':dict([('','rwn')]),
+                  'associatedStreet':dict([('','wn'),('house','rwn'),('street','w')]),
+                  'street':dict([('','w'),('house','rwn'),('street','w'),('address','wn')]),
                   'restriction':dict([('from','w'),('via','wn'),('to','w'),('location_hint','n')]),
                   }
                                       
