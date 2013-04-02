@@ -182,7 +182,29 @@ def build_typestatus():
         dd[hierarchy] = {'status':status, 'note':note}
     return dd
 
+def no_mp_filter(object):
+    """
+    negative filter for all multipolygon relations
+    """
+    if type(object) == pyosm.Node:
+        return False
+    elif type(object) == pyosm.Way:
+        return False
+    elif type(object) == pyosm.Relation:
+        rtype = object.tags.get('type')
+        if rtype == 'multipolygon':
+            mptag = object.tags.get('multipolygon')
+            if object.tags.get('multipolygon'):
+                return True # a multipolygon with bad subtags
+            else:
+                return False # a multipolyon
+        return True
+    return True
+
 def waterway_relations_filter(object):
+    """
+    positive filter for all waterway related relations
+    """
     waterwayset = set(['waterway', 'stream', 'river', 'canal', 'drain','watershed','river_basin','pipeline'])
     if type(object) == pyosm.Node:
         return False
@@ -199,6 +221,9 @@ def waterway_relations_filter(object):
     return True
 
 def power_relations_filter(object):
+    """
+    positive filter for all power related relations
+    """
     if type(object) == pyosm.Node:
         return False
     elif type(object) == pyosm.Way:
@@ -215,6 +240,9 @@ def power_relations_filter(object):
     return True
 
 def street_relations_filter(object):
+    """
+    positive filter for all street related relations
+    """
     streetset = set(['street', 'relatedStreet', 'associatedStreet', 'address', 'street_number'])
     if type(object) == pyosm.Node:
         return False
@@ -231,6 +259,9 @@ def street_relations_filter(object):
     return True
 
 def osm_relations_filter(object):
+    """
+    positive filter for all relations that have an osm tag
+    """
     osmset = set(['osm'])
     if type(object) == pyosm.Node:
         return False
@@ -247,6 +278,10 @@ def osm_relations_filter(object):
     return True
 
 def load_empty_relations(filename):
+    """
+    load the relation ids of all empty relations
+    returns a dictionary with all relation ids (type(string))
+    """
     empty_rel = set()
     try:
         for line in open(filename).readlines()[1:]:
@@ -262,7 +297,8 @@ if len(sys.argv) > 2:
     filterfunc = {'waterway': waterway_relations_filter,
                   'power': power_relations_filter,
                   'street': street_relations_filter,
-                  'osm': osm_relations_filter}.get(sys.argv[2])
+                  'osm': osm_relations_filter,
+                  'no_mp':no_mp_filter}.get(sys.argv[2])
 else:
     filterfunc = None
 
