@@ -1,0 +1,81 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+  <head>
+    <title>OpenStreetBugs: Phase-Out</title>
+    <style type="text/css">
+      table { border:1px solid grey; empty-cells:show; }
+      th { border:1px solid grey; background:#BBBBBB; }
+      td { border:1px solid grey; }
+    </style>
+  </head>
+
+  <body>
+    <small>last update: $DATE</small>
+    <hr>
+
+    <h1> OpenStreetBugs: Phase-Out </h1>
+    This page relates to phase-out plans described in the <a href="https://wiki.openstreetmap.org/wiki/OpenStreetBugs/Phase_Out">osm wiki</a>
+
+    <h2> OSM-Bugs splitted in Areas </h2> 
+    <img src="osb_openbugs.png"> <p>
+
+    bugs in <a href="osb_openbugs_eu.png">europe</a>
+    
+ <h3>Table</h3>
+
+    <table>
+        <tr>
+          <th> No.</th>
+          <th> Bugs</th>
+          <th> Nearby Place </th>
+          <th> Area (GPX-Link)</th>
+	  <th> Area (deg*deg) </th>
+	  <th> misc </th>
+        </tr>
+
+<!-- ROWS replacement start -->
+$ROWS
+<!-- ROWS replacement end -->
+    </table>
+
+    <h3> Helper tool jump through the bugs </h3>
+    (not published yet)
+    
+    Features:
+    <ul>
+      <li> download a buglist with an area string </li>
+      <li> jump through the bugs. Call Josm load and zoom, display the current bug</li>
+      <li> ... now fix bugs in Josm, close old bug entries, .... </li>
+      <li> move good bug reports to OS Notes if it is not fixable</li>
+    </ul>
+
+    <img src="osb_fixing.png">
+
+    <h3> Statistics</h3>
+    
+    <img src="osb_open_bugs.png">
+    <img src="osb_opendclosed.png">
+    <img src="osb_creation_vs_bugid.png">
+    <img src="osb_creation_date.png">
+
+    <h3> Bugs by country </h3>
+    No. of countries: $NO_COUNTRIES
+    <table>
+        <tr>
+          <th> Country</th>
+          <th> No. Bugs</th>
+          <th> Area </th>
+       </tr>
+
+<!-- ROWS replacement start -->
+$STAT
+<!-- ROWS replacement end -->
+    </table>
+
+    <hr>
+    <address><a href="mailto:werner.ho@gmx.de">Werner Hoch</a></address>
+<!-- hhmts start -->
+Last modified: Sun Oct 20 08:48:46 CEST 2013
+<!-- hhmts end -->
+  </body>
+</html>
