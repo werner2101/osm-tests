@@ -51,7 +51,7 @@ def print_empty_relations(filename, relations, member_relations):
         rtype = tags.pop('type','')
         subtype = tags.pop(rtype,'')
         user_dict[rel_user] = user_dict.get(rel_user, 0) + 1
-        table.append(['M', str(rel_date), rel_changeset, str(rel_id), str(rel_version), 
+        table.append(['M', str(rel_date), int(rel_changeset), str(rel_id), str(rel_version), 
                       'UN', rel_user, rtype, subtype]
                      + ["%s=%s" %(k,v) for k,v in sorted(tags.items())])
 
@@ -129,5 +129,3 @@ parser.parse(sys.stdin)
 user_dict = print_empty_relations(OUTDIR + area + '/empty_relations.txt',
                                   osm_handler.relations, osm_handler.member_relations)
 create_user_stat(OUTDIR + '/empty_relations.html', user_dict)
-
-
