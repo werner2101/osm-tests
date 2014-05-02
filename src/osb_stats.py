@@ -111,7 +111,7 @@ def user_bugs(country=None, bugtype='all'):
         if country and country != nearby_place[-3:-1]:
             continue
         toks = text.replace(']',',').split('<hr />')
-        creator = 'XX'
+        creator = ''
         try:
             creator = toks[0].split('[')[1].split(',')[0]
         except:
@@ -121,12 +121,13 @@ def user_bugs(country=None, bugtype='all'):
         else:
             bug_creators[creator] = 1
 
-        fixer = 'XX'
+        fixer = ''
         if btype == 1:
-            try:
-                fixer = toks[-1].split('[')[1].split(',')[0]
-            except:
-                pass
+            if len(toks) > 1:
+                try:
+                    fixer = toks[-1].split('[')[1].split(',')[0]
+                except:
+                    pass
             if fixer in bug_fixer:
                 bug_fixer[fixer] += 1
             else:
@@ -135,27 +136,34 @@ def user_bugs(country=None, bugtype='all'):
     conn.close()
     return bug_creators, bug_fixer
 
-def print_table(stat_dict, max_rows=20):
-    l = [(v,k) for k,v in stat_dict.items()]
-    l.sort(reverse=True)
-    for n, name in l[:max_rows]:
-        print '%i\t%s' %(n,name)
+def print_table(stat1, stat2,  max_rows=20):
+    """
+    create a wiki-table with osb contributer statistics
+    """
+    l1 = [(v,k) for k,v in stat1.items()]
+    l1.sort(reverse=True)
+    l2 = [(v,k) for k,v in stat2.items()]
+    l2.sort(reverse=True)
+    for g1, g2 in zip(l1[:max_rows],l2[:max_rows]):
+        n, name = g1
+        n2, name2 = g2
+        print '|%s||%i|| ||%s||%i||\n|-' %(name, n, name2, n2)
 
 #################### MAIN
 
-creator, closer = user_bugs(country='RU', bugtype='open')
 creator, closer = user_bugs()
 print "\n Bug creators"
-print_table(creator, 50)
-print "\n Bug closers"
-print_table(closer, 50)
-sys.exit()
+print_table(creator, closer, 50)
+#sys.exit()
 
 bugs = open_bugs()
-print len(bugs)
+n_open = len(bugs)
 
-## create and split batch
-batches_complete = batch_splitter(Batch(bugs))
+if n_open:
+    ## create and split batch
+    batches_complete = batch_splitter(Batch(bugs))
+else:
+    batches_complete = []
 
 ## bugs by country
 country = {}
@@ -224,7 +232,6 @@ for n,b in enumerate(batches_complete):
                  str(n),fontdict=font,
                  horizontalalignment='center', verticalalignment='center')
 plt.savefig(OUTDIR+'osb_openbugs_moscow.png',dpi=100)
-
 plt.close()
 
 template = string.Template(open(os.path.join(TEMPLATEDIR,'osb_stats.html')).read())
@@ -281,18 +288,27 @@ bugs.sort()
 osb2notesfix.sort()
 osbfixingfix.sort()
 
+## stat for all bugs
 date = numpy.array([b[0] for b in bugs])
 inc_dec = numpy.array([b[1] for b in bugs])
 bugs_open = numpy.cumsum(inc_dec)
+bugset2 = [b for b in bugs if b[1] > 0]
+bugset3 = [b for b in bugs if b[1] < 1]
 
 pylab.subplot(211)
-pylab.plot(date,bugs_open)
+pylab.title("Openstreetbugs statistics")
+pylab.plot([b[0] for b in bugset2],
+           numpy.cumsum([b[1] for b in bugset2]),
+           label='all bugs')
+pylab.plot([b[0] for b in bugset3],
+           -numpy.cumsum([b[1] for b in bugset3]),
+           label='closed bugs')
+pylab.legend(loc='upper left')
 pylab.grid()
-pylab.title('Open Bugs in OSB (currently %i)' %bugs_open[-1])
 
 pylab.subplot(212)
-nhide = 570000
-pylab.plot(date[nhide:],bugs_open[nhide:])
+pylab.plot(date,bugs_open, label='open bugs')
+pylab.legend(loc='upper left')
 pylab.grid()
 pylab.savefig(OUTDIR + 'osb_open_bugs.png')
 #pylab.show()
@@ -351,7 +367,7 @@ b_closed = curs.fetchall()
 pylab.plot([float(x[0])-2000.05 for x in b_created],[y[1] for y in b_created],label='bugs created')
 pylab.plot([float(x[0])-2000.05 for x in b_closed],[y[1] for y in b_closed],label='bugs closed')
 pylab.grid()
-pylab.title('Opend and closed bugs (by month)')
+pylab.title('Opened and closed bugs (grouped by month)')
 pylab.legend(loc='best')
 pylab.xlabel('Year 20xx')
 #pylab.show()
