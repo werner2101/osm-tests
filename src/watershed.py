@@ -354,6 +354,9 @@ class WaterwayRelationScanner(object):
                     linkname = 'wp'
                     ref = 'http://en.wikipedia.org/wiki/%s' %  v
             links.append('<a href="%s"> (%s)</a>' % (ref, linkname))
+        if 'wikidata' in tags:
+            ref = 'https://www.wikidata.org/wiki/%s' % tags['wikidata']
+            links.append('<a href="%s"> (%s)</a>' % (ref, 'wd'))
         return ' '.join(links)
 
 
