@@ -10,13 +10,14 @@ import numpy, pylab, matplotlib
 from datetime import datetime
 
 #################### CONSTANTS
-OUTDIR='../data/09_osb_phaseout/'
+OUTDIR='data/10_notes_statistics/'
 
 #################### CLASSES
 class OsmNotes(handler.ContentHandler):
-    def __init__(self):
+    def __init__(self, filter_osb='no'):
         self.opened = []
         self.closed = []
+        self.filter_osb = filter_osb
         self.__created = ''
         self.__closed = ''
         self.__match = False
@@ -34,8 +35,13 @@ class OsmNotes(handler.ContentHandler):
     def characters(self, content):
         if self.__osn_comment_nr > 1:
             return
-        if re.match('.*Moved from OSB ID.*|.*OSB.*|.*openstreetbugs.*',content, re.IGNORECASE):
+                    
+        if self.filter_osb == 'yes':
+            if re.match('.*Moved from OSB ID.*|.*OSB.*|.*openstreetbugs.*',content, re.IGNORECASE):
+                self.__match = True
+        else:
             self.__match = True
+
 
     def endElement(self, obj):
         if obj == 'note':
@@ -66,7 +72,6 @@ def plot_cdf(opened, closed, filename):
     all_notes.sort()
     
     pylab.subplot(211)
-    pylab.title("Notes moved from Openstreetbugs")
     pylab.plot(opened, numpy.arange(lenopened)+1, label='opened Notes')
     pylab.plot(closed, numpy.arange(lenclosed)+1, label='closed Notes')
     pylab.legend(loc='upper left')
@@ -77,20 +82,23 @@ def plot_cdf(opened, closed, filename):
                numpy.cumsum([n[1] for n in all_notes]),
                label='open notes')
     pylab.legend(loc='upper left')
-    pylab.xlabel('date')
     pylab.grid()
     pylab.savefig(filename)
-    pylab.show()
+#    pylab.show()
     pylab.close()    
 
 #################### MAIN
-osm_handler = OsmNotes()
+
+plotname = sys.argv[1]
+filter_osb = sys.argv[2]
+
+osm_handler = OsmNotes(filter_osb)
 
 parser = make_parser()
 parser.setContentHandler(osm_handler)
 parser.parse(sys.stdin)
 
-print len(osm_handler.opened), len(osm_handler.closed)
-print osm_handler.opened[:5], osm_handler.closed[:5]
+#print len(osm_handler.opened), len(osm_handler.closed)
+#print osm_handler.opened[:5], osm_handler.closed[:5]
 
-plot_cdf(osm_handler.opened, osm_handler.closed, 'notes_from_osb.png')
+plot_cdf(osm_handler.opened, osm_handler.closed, OUTDIR + plotname)
