@@ -76,6 +76,9 @@ class River(object):
         self.mouth_waterway = -1
         self.mouth_area = -1
         self.sidestreams = []
+        self.lakes_onriver = []
+        self.part_of = []
+        self.has_part = []
         self._type = _type
         self.osm_relid = ''
         self.coords = ('','')
@@ -90,6 +93,12 @@ class River(object):
         for ss in self.sidestreams:
             if level < 20:
                 ss.traverse(level+1, visited, objlist)
+        for hp in self.has_part:
+            if level < 20:
+                hp.traverse(level+1, visited, objlist)
+        for lor in self.lakes_onriver:
+            if level < 20 and lor:
+                lor.traverse(level+1, visited, objlist)
 
     def write(self, level):
         if self.mouth_waterway > 0:
@@ -114,6 +123,7 @@ class Waterarea(object):
         self._type = _type
         self.part_of = -1
         self.inflows = []
+        self.outflow = -1
         self.subparts = []
         self.osm_relid = ''
         self.coords = ('','')
@@ -173,8 +183,12 @@ def readjson_waterways():
             rivers[wd_id].countries.append(country)
         for wd_id, type_, continent in jdata['props'].get('30',[]):
             rivers[wd_id].continents.append(continent)
+        for wd_id, type_, part_of in jdata['props'].get('361',[]):
+            rivers[wd_id].part_of.append(part_of)
         for wd_id, type_, adminarea in jdata['props'].get('131',[]):
             rivers[wd_id].adminarea.append(adminarea)
+        for wd_id, type_, lakes_river in jdata['props'].get('469',[]):
+             rivers[wd_id].lakes_onriver.append(lakes_river)
 
     return rivers
 
@@ -205,20 +219,22 @@ def readjson_waterareas():
             waterareas[wd_id].continents.append(continent)
         for wd_id, type_, adminarea in jdata['props'].get('131',[]):
             waterareas[wd_id].adminarea.append(adminarea)
+        for wd_id, type_, outflow in jdata['props'].get('201',[]):
+            waterareas[wd_id].outflow = outflow
 
     return waterareas
 
 def retrieve_wikidata():
     for i_id, r_type in WATERWAYS:
         print i_id, r_type
-        url = TOOLSERVER + '?q=claim[31:%s]&props=402,403,31,625,17,30,131' %i_id
+        url = TOOLSERVER + '?q=claim[31:%s]&props=402,403,31,625,17,30,131,469,361' %i_id
         answ = urllib.urlopen(url)
         data = answ.read()
         open(os.path.join(OUTDIR, r_type + '.json'), 'wt').write(data)
     
     for i_id, r_type in WATERAREAS:
         print i_id, r_type
-        url = TOOLSERVER + '?q=claim[31:%s]&props=402,31,625,17,30,131,361' %i_id
+        url = TOOLSERVER + '?q=claim[31:%s]&props=402,31,625,17,30,131,361,201' %i_id
         answ = urllib.urlopen(url)
         data = answ.read()
         open(os.path.join(OUTDIR, r_type + '.json'), 'wt').write(data)
@@ -238,11 +254,25 @@ def analyse_wikidata():
             unknown_mouth.append(ww)
         else:
             no_mouth.append(ww)
+        for n, po in enumerate(ww.part_of):
+            if po in rivers:
+                rivers[po].has_part.append(ww)
+            else:
+                print "river part_of not found", ww.wd_id, po
+        for n, lor in enumerate(ww.lakes_onriver):
+            if lor in waterareas:
+                ww.lakes_onriver[n] = waterareas[lor]
+            else:
+                ww.lakes_onriver[n] = None
 
     no_part = []
     for w_id, wa, in waterareas.items():
         if wa.part_of in waterareas:
             waterareas[wa.part_of].subparts.append(wa)
+        elif wa.part_of in rivers:
+            rivers[wa.part_of].has_part.append(wa)
+        elif wa.outflow in rivers:
+            rivers[wa.outflow].lakes_onriver.append(wa)
         else:
             no_part.append(wa)
     
@@ -252,13 +282,15 @@ def analyse_wikidata():
     for wa in sorted(no_part):
         if not (len(wa.subparts) + len(wa.inflows)):
             continue
-        wa.traverse(1,visited,objlist)
+        if wa.wd_id in visited:
+            wa.traverse(1,visited,objlist)
         
     for river in sorted(unknown_mouth):
-        river.traverse(1, visited, objlist)
+        if river.wd_id in visited:
+            river.traverse(1, visited, objlist)
     
     for river in sorted(no_mouth):
-        if river.mouth_waterway == -1:
+        if river.mouth_waterway == -1 and river.wd_id in visited:
             river.traverse(1,visited, objlist)
     
     fid = open(os.path.join(OUTDIR, 'wikidata_tree.txt'), 'wt')
@@ -292,11 +324,10 @@ def analyse_wikidata():
             if i in selection:
                 fid.write(obj.write(level) + '\n')
         fid.close()
-                
-    
+
 
 #################### MAIN
-#retrieve_wikidata()
+retrieve_wikidata()
 analyse_wikidata()
 
         
