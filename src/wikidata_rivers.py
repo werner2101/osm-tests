@@ -30,7 +30,9 @@ WATERWAYS = [('573344', 'mainstem'),
              ('12284', 'canal'),
              ('523166','gracht'),
              ('34038','waterfall'),
-             ('355304','watercourse')]
+             ('355304','watercourse'),
+             ('166620','drainage basin'),
+             ('285451','drainage system')]
              
 WATERAREAS = [('9430','ocean'),
               ('165','sea'),
@@ -87,8 +89,11 @@ class River(object):
         self.continents = []
         
     def traverse(self, level, visited, objlist):
-        visited.discard(self.wd_id)
-        objlist.append((self,level))
+        if self.wd_id in visited:
+            visited.discard(self.wd_id)
+            objlist.append((self,level))
+        else:
+            return
 
         for ss in self.sidestreams:
             if level < 20:
@@ -132,8 +137,11 @@ class Waterarea(object):
         self.continents = []
 
     def traverse(self, level, visited, objlist):
-        visited.discard(self.wd_id)
-        objlist.append((self, level))
+        if self.wd_id in visited:
+            visited.discard(self.wd_id)
+            objlist.append((self, level))
+        else:
+            return
 
         for sp in self.subparts:
             if level < 20:
