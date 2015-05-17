@@ -11,7 +11,7 @@ import watershed_config
 
 sys.path.append('../python-osm/src/')
 from osm import pyosm
-
+import wikidata_rivers
 
 #################### CONSTANTS
 BASEDIR = os.path.abspath(os.path.join(os.path.dirname(__file__),'../'))
@@ -105,6 +105,7 @@ class WaterwayRelationScanner(object):
         relations_up = open(os.path.join(self.outdir,'relations_up.txt'),'wt')
 
         rows = {}
+        osmrivers = {}
         for relid, rel in sorted(self.osm.relations.items()):
             print 'scanning:', relid, rel.tags.get('name', '')
 
@@ -113,19 +114,28 @@ class WaterwayRelationScanner(object):
 
             relations_up.write('%d=%s\n' %(relid, ' '.join([str(u) for u in up])))
 
-            row = []
-#            row.append('<pre>'+'.'*(level-1) + str(level) + '</pre>')
-            row.append('xx')
-            row.append('<a href="http://www.openstreetmap.org/browse/relation/%i">%i</a> <a href="%i.html">(d)</a>' % (relid,relid,relid))
-            row.append(rel.tags.get('name', '') + self.wikipedia_links(rel.tags))
-            row.append(', '.join(['%s=%s' % (k,v) for k,v in rel.tags.items() if k.startswith('ref')]))
-            row.append(rel.tags.get('destination','') + ' ' +  rel.tags.get('tributary_of',''))
-            row.append(str(stat['way_members']))
-            row.append(str(len(down)))
-            row.append(str(len(up)))
-            row.append(str(stat['downstream_ways']))
-            row.append(str(stat['upstream_ways']))
+            osmriver = wikidata_rivers.OsmRiver(relid)            
+            osmriver.name = rel.tags.get('name', '')
+            osmriver.wikipedia = self.wikipedia_links(rel.tags)
+            osmriver.type_ = rel.tags.get('waterway','')
+            osmriver.destination = rel.tags.get('destination', '')
+            osmriver.sidestreams = list(up)
+            osmriver.wd_id = rel.tags.get('wikidata', '')
+            osmrivers['o'+ str(relid)] = osmriver
+            
+            row = ['xx', # place holder for level column
+                   '<a href="http://www.openstreetmap.org/browse/relation/%i">%i</a> <a href="%i.html">(d)</a>' % (relid,relid,relid),
+                    rel.tags.get('name', '') + self.wikipedia_links(rel.tags),
+                    ', '.join(['%s=%s' % (k,v) for k,v in rel.tags.items() if k.startswith('ref')]),
+                    rel.tags.get('destination','') + ' ' +  rel.tags.get('tributary_of',''),
+                    str(stat['way_members']),
+                    str(len(down)),
+                    str(len(up)),
+                    str(stat['downstream_ways']),
+                    str(stat['upstream_ways']),
+                    ]
             rows[relid] = row
+            
 
         tree = self.traverse_relations()
         colors = {'dest':' bgcolor="#7777FF"',
@@ -147,6 +157,8 @@ class WaterwayRelationScanner(object):
                  'WAY_RELATIONS': str(len(self.wayrel))}
         filename = os.path.join(self.outdir, 'hierarchical.html')
         open(filename,'wt').write(template.safe_substitute(subst))
+        
+        wikidata_rivers.analyse_wikidata(osmrivers)
 
         count = 1
         htmlrows = []
