@@ -121,7 +121,7 @@ class WaterwayRelationScanner(object):
             osmriver.destination = rel.tags.get('destination', '')
             osmriver.sidestreams = list(up)
             osmriver.wd_id = rel.tags.get('wikidata', '')
-            osmrivers['o'+ str(relid)] = osmriver
+            osmrivers[relid] = osmriver
             
             row = ['xx', # place holder for level column
                    '<a href="http://www.openstreetmap.org/browse/relation/%i">%i</a> <a href="%i.html">(d)</a>' % (relid,relid,relid),

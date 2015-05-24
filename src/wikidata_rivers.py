@@ -9,6 +9,7 @@ Created on Thu Dec  4 09:21:51 2014
 # -*- coding: utf-8 -*-
 
 import sys
+import io
 import os, time
 import string
 import json
@@ -96,14 +97,14 @@ class River(object):
         self.osmriver =  None
         
     def traverse(self, level, visited, objlist):
-        if self.wd_id in visited:
-            visited.discard(self.wd_id)
+        if self in visited:
+            visited.discard(self)
             objlist.append((self,level))
         else:
             return
 
         if self.osmriver:
-            self.osmriver.traverse(level+1, visited, objlist)
+            self.osmriver.traverse(level, visited, objlist)
         for ss in self.sidestreams:
             if level < 20:
                 ss.traverse(level+1, visited, objlist)
@@ -119,7 +120,7 @@ class River(object):
             mouth = self.mouth_waterway
         else:
             mouth = self.mouth_area
-        return '\t'.join(['.'*(level-1)+str(level), str(self.wd_id), self.name, self.osm_relid,
+        return u'\t'.join(['.'*(level-1)+str(level), str(self.wd_id), self.name, self.osm_relid,
                          str(self._type), str(mouth),
                          self.coords[0].replace('.',','), self.coords[1].replace('.',','),
                          ' '.join([str(i) for i in self.continents]),
@@ -143,9 +144,8 @@ class OsmRiver(object):
         self.countries = []
 
     def traverse(self, level, visited, objlist):
-        relid = 'o' + str(self.osm_relid)
-        if relid in visited:
-            visited.discard(relid)
+        if self in visited:
+            visited.discard(self)
             objlist.append((self,level))
         else:
             return
@@ -155,7 +155,7 @@ class OsmRiver(object):
                 ss.traverse(level+1, visited, objlist)
 
     def write(self, level):
-        return '\t'.join(['.'*(level-1)+str(level), str(self.wd_id), self.name, str(self.osm_relid),
+        return u'\t'.join(['.'*(level-1)+str(level), str(self.wd_id), self.name, str(self.osm_relid),
                          str(self.type_), self.destination,
                         '', # coords
                         '', # continents
@@ -184,8 +184,8 @@ class Waterarea(object):
         self.continents = []
 
     def traverse(self, level, visited, objlist):
-        if self.wd_id in visited:
-            visited.discard(self.wd_id)
+        if self in visited:
+            visited.discard(self)
             objlist.append((self, level))
         else:
             return
@@ -198,13 +198,23 @@ class Waterarea(object):
                 river.traverse(level+1, visited, objlist)
 
     def write(self, level):
-        return '\t'.join(['.'*(level-1)+str(level), str(self.wd_id), self.name, self.osm_relid,
+        return u'\t'.join(['.'*(level-1)+str(level), str(self.wd_id), self.name, self.osm_relid,
                          str(self._type), str(self.part_of),
                          self.coords[0].replace('.',','), self.coords[1].replace('.',','),
                          ' '.join([str(i) for i in self.continents]),
                          ' '.join([str(i) for i in self.countries]),
                          ' '.join([str(i) for i in self.adminarea])
                          ])
+    def writehtml(self, level):
+        cells = ['.'*(level-1)+str(level),
+                 '<a href="https://www.wikidata.org/wiki/Q%i">%i</a>' %(self.wd_id, self.wd_id),
+                 self.name,
+                 '<a href="http://www.openstreetmap.org/relation/%i>%i</a>' %(self.osm_relid, self.osm_relid),
+                 str(self._type),
+                 '<a href="https://www.wikidata.org/wiki/Q%i">%i</a>' %(self.part_of, self.part_of),
+                 'FIXME'
+                ]
+        return '<tr><td>' + '</td><td>'.join(cells) + '</td></tr>' 
             
     def __cmp__(self, other):
         assert isinstance(other, Waterarea)
@@ -339,26 +349,26 @@ def analyse_wikidata(osmrivers={}):
     ## preporcessing of osmriver items
     for osmid, osmriver in osmrivers.iteritems():
         for i, sidestream in enumerate(osmriver.sidestreams):
-            osmriver.sidestreams[i] = osmrivers['o' + str(sidestream)]
+            osmriver.sidestreams[i] = osmrivers[sidestream]
         if osmriver.wd_id:
             wdid = int(osmriver.wd_id[1:])
             if wdid in rivers:
                 rivers[wdid].osmriver = osmriver
     
     ## need a list for the result and a set of all wikidata objects that will be visited
-    visited = set(rivers.keys()) | set(waterareas.keys()) | set(osmrivers.keys())
+    visited = set(rivers.values()) | set(waterareas.values()) | set(osmrivers.values())
     objlist = []
 
     ## start traversing with waterareas that are not part of other areas    
     for wa in sorted(no_part):
         if not (len(wa.subparts) + len(wa.inflows)):
             continue
-        if wa.wd_id in visited:
+        if wa in visited:
             wa.traverse(1,visited,objlist)
         
     ## collect all rivers with present, but unknown destination
     for river in sorted(unknown_mouth):
-        if river.wd_id in visited:
+        if river in visited:
             river.traverse(1, visited, objlist)
     
     ## collect all the rest of the watercourses    
@@ -366,9 +376,22 @@ def analyse_wikidata(osmrivers={}):
         if river.mouth_waterway == -1:
             river.traverse(1,visited, objlist)
 
+    ## collect all rivers only present in osm
+    osmrivers_unvisited = set(osmrivers.values()) & visited
+    print len(osmrivers_unvisited)
+    for osmriver in list(osmrivers_unvisited):
+        osmrivers_unvisited -= set(osmriver.sidestreams)
+    print len(osmrivers_unvisited)
+    for osmriver in osmrivers_unvisited:
+        osmriver.traverse(1,visited, objlist)
+    osmrivers_unvisited = set(osmrivers.values()) & visited
+    print len(osmrivers_unvisited)
+    for osmriver in osmrivers_unvisited:
+        osmriver.traverse(1,visited, objlist)
+
     ## write the whole object list into a text file
-    fid = open(os.path.join(OUTDIR, 'wikidata_tree.txt'), 'wt')
-    fid.write('\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+    fid = io.open(os.path.join(OUTDIR, 'wikidata_tree.txt'), 'wt', encoding='utf-8')
+    fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
     for obj, level in objlist:
         fid.write(obj.write(level) + '\n')
     ## write the whole object list into a html file
@@ -388,20 +411,20 @@ def analyse_wikidata(osmrivers={}):
         for i, objl in enumerate(objlist):
             obj, level = objl
             levelstack[level] = i
+            countrystack[level] = -1
             if obj.countries:
                 if country in obj.countries:
                     countrystack[level] = country
-                else:
-                    countrystack[level] = -1                   
-            if not obj.countries:
+            else:
                 if countrystack[level-1] == country:
                     countrystack[level] = country
+                    
             if country == countrystack[level]:
                 selection |= set(levelstack[:level+1])
 
-        ## write a txt file for eacht country
-        fid = open(os.path.join(OUTDIR, 'countries', '%i.txt' %country), 'wt')
-        fid.write('\t'.join(['Level','wd_id','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+        ## write a txt file for each country
+        fid = io.open(os.path.join(OUTDIR, 'countries', '%i.txt' %country), 'wt', encoding='utf-8')
+        fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
         destlevel = 0
         for i, objl in enumerate(objlist):
             obj, level = objl
