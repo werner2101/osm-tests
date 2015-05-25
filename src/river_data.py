@@ -82,25 +82,36 @@ class OsmRiver(object):
             
 class Wikidata(object):
     def __init__(self, wdid):
-        self.wdid = wdid
-        self.data = ''
+        self.wdid = str(wdid)
+        self.wdid_link = '<a href="https://www.wikidata.org/wiki/Q%s">Q%s</a>' %(wdid,wdid)
+        self.name = ''
+        self.jsondata = ''
+        self.data = {}
         
         self.get_data()
+        self.read_data()
         
     def get_data(self):
         tmppath = os.path.join(WIKIDATA_TMP, self.wdid + '.json')
         if os.path.exists(tmppath):
-            self.data = open(tmppath).read()
+            self.jsondata = open(tmppath).read()
         else:
-            url=WIKIDATA_SERVER + '?action=wbgetentities&ids=%s&format=json' %self.wdid
+            url=WIKIDATA_SERVER + '?action=wbgetentities&ids=Q%s&format=json' %self.wdid
             reldata = urllib.urlopen(url)
-            self.data = reldata.read()
-            open(tmppath, 'wt').write(self.data)
+            self.jsondata = reldata.read()
+            open(tmppath, 'wt').write(self.jsondata)
             
     def html(self):
         htmlstr = self.wdid
         return htmlstr
         
+    def read_data(self):
+        if not self.jsondata:
+            return
+        self.data = json.loads(self.jsondata)
+        aliases = self.data.get('entities',{}).get('Q'+self.wdid,{}).get('labels',{})
+        self.name = aliases.get('en',{}).get('value','')
+                
     def __str__(self):
         return '%s' % self.wdid
             
@@ -111,7 +122,7 @@ class Wikipedia(object):
         self.hash = hashlib.sha1(self.page).hexdigest()
         
         self.jsondata = ''
-        self.data = ''
+        self.data = {}
         self.wikidata = ''
         self.title = ''
         self.content = ''
@@ -229,7 +240,6 @@ class RiverHttpHandler(BaseHTTPRequestHandler):
             return
         except IOError:
             self.send_error(404,'File Not Found: %s' % self.path)
-
 
 ##################### FUNCTIONS
 def runserver(port):

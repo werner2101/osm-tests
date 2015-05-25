@@ -155,7 +155,11 @@ class OsmRiver(object):
                 ss.traverse(level+1, visited, objlist)
 
     def write(self, level):
-        return u'\t'.join(['.'*(level-1)+str(level), str(self.wd_id), self.name, str(self.osm_relid),
+        if self.wd_id:
+            wd_id = self.wd_id[1:]
+        else:
+            wd_id = ''
+        return u'\t'.join(['.'*(level-1)+str(level), wd_id, self.name, str(self.osm_relid),
                          str(self.type_), self.destination,
                         '', # coords
                         '', # continents
@@ -171,6 +175,7 @@ class OsmRiver(object):
 class Waterarea(object):
     def __init__(self, wikidata_id, _type):
         self.wd_id = wikidata_id
+        self.osm_relid = ''   # not used
         self._type = _type
         self.name = ''
         self.part_of = -1
@@ -219,6 +224,188 @@ class Waterarea(object):
     def __cmp__(self, other):
         assert isinstance(other, Waterarea)
         return cmp((self.wd_id), (other.wd_id))
+
+
+class WD_Analyser(object):
+    def __init__(self, osmrivers={}):
+        self.osmrivers = osmrivers
+        self.objlist = []
+        
+        self.read()
+        self.analyse()
+    
+    def read(self):
+        """
+        read river and waterarea data and analyse it
+        """
+        self.rivers = readjson_waterways()
+        self.waterareas = readjson_waterareas()
+    
+    def analyse(self):
+        ## preprocessing of river items
+        no_mouth = []
+        unknown_mouth = []    
+        for w_id, ww in self.rivers.items():
+            if ww.mouth_waterway in self.rivers:
+                self.rivers[ww.mouth_waterway].sidestreams.append(ww)
+            elif ww.mouth_waterway in self.waterareas:
+                self.waterareas[ww.mouth_waterway].inflows.append(ww)          
+            elif ww.mouth_waterway > 0:
+                unknown_mouth.append(ww)
+            else:
+                no_mouth.append(ww)
+            for n, po in enumerate(ww.part_of):
+                if po in self.rivers:
+                    self.rivers[po].has_part.append(ww)
+                else:
+                    print "river part_of not found", ww.wd_id, po
+            for n, lor in enumerate(ww.lakes_onriver):
+                if lor in self.waterareas:
+                    ww.lakes_onriver[n] = self.waterareas[lor]
+                else:
+                    ww.lakes_onriver[n] = None
+    
+        ## preprocessing of waterarea items    
+        no_part = []
+        for w_id, wa, in self.waterareas.items():
+            if wa.part_of in self.waterareas:
+                self.waterareas[wa.part_of].subparts.append(wa)
+            elif wa.part_of in self.rivers:
+                self.rivers[wa.part_of].has_part.append(wa)
+            elif wa.outflow in self.rivers:
+                self.rivers[wa.outflow].lakes_onriver.append(wa)
+            else:
+                no_part.append(wa)
+    
+        ## preporcessing of osmriver items
+        for osmid, osmriver in self.osmrivers.iteritems():
+            for i, sidestream in enumerate(osmriver.sidestreams):
+                osmriver.sidestreams[i] = self.osmrivers[sidestream]
+            if osmriver.wd_id:
+                wdid = int(osmriver.wd_id[1:])
+                if wdid in self.rivers:
+                    self.rivers[wdid].osmriver = osmriver
+        
+        ## need a list for the result and a set of all wikidata objects that will be visited
+        visited = set(self.rivers.values()) | set(self.waterareas.values()) | set(self.osmrivers.values())
+    
+        ## start traversing with waterareas that are not part of other areas    
+        for wa in sorted(no_part):
+            if not (len(wa.subparts) + len(wa.inflows)):
+                continue
+            if wa in visited:
+                wa.traverse(1,visited,self.objlist)
+            
+        ## collect all rivers with present, but unknown destination
+        for river in sorted(unknown_mouth):
+            if river in visited:
+                river.traverse(1, visited, self.objlist)
+        
+        ## collect all the rest of the watercourses    
+        for river in sorted(no_mouth):
+            if river.mouth_waterway == -1:
+                river.traverse(1,visited, self.objlist)
+    
+        ## collect all rivers only present in osm
+        osmrivers_unvisited = set(self.osmrivers.values()) & visited
+        print 'unvisited osmrivers:', len(osmrivers_unvisited)
+        for osmriver in list(osmrivers_unvisited):
+            osmrivers_unvisited -= set(osmriver.sidestreams)
+        print 'unvisited osmrivers without sidestreams:', len(osmrivers_unvisited)
+        for osmriver in osmrivers_unvisited:
+            osmriver.traverse(1,visited, self.objlist)
+        osmrivers_unvisited = set(self.osmrivers.values()) & visited
+        print 'unvisited osmrivers with recursion:', len(osmrivers_unvisited)
+        for osmriver in osmrivers_unvisited:
+            osmriver.traverse(1,visited, self.objlist)
+
+    def write(self):
+        ## write the whole object list into a text file
+        fid = io.open(os.path.join(OUTDIR, 'wikidata_tree.txt'), 'wt', encoding='utf-8')
+        fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+        for obj, level in self.objlist:
+            fid.write(obj.write(level) + '\n')
+   
+    def write_countries(self):
+        ## create lists for eatch country
+        # collect all countries in a set first    
+        countries = set()  # of wikidata ids
+        for i, r in self.rivers.iteritems():
+            countries |= set(r.countries)
+        country_rows = []    
+        for country in sorted(countries):
+            levelstack = [-1]*100
+            countrystack = [-1]*100
+            selection = set()
+            for i, objl in enumerate(self.objlist):
+                obj, level = objl
+                levelstack[level] = i
+                countrystack[level] = -1
+                if obj.countries:
+                    if country in obj.countries:
+                        countrystack[level] = country
+                else:
+                    if countrystack[level-1] == country:
+                        countrystack[level] = country
+                        
+                if country == countrystack[level]:
+                    selection |= set(levelstack[:level+1])
+    
+            ## write a txt file for each country
+            fid = io.open(os.path.join(OUTDIR, 'countries', '%i.txt' %country), 'wt', encoding='utf-8')
+            fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+            destlevel = 0
+            for i, objl in enumerate(self.objlist):
+                obj, level = objl
+                if i in selection:
+                    fid.write(obj.write(level) + '\n')
+                    if level == 1:
+                        destlevel += 1
+            fid.close()
+            ## write a html file for each country
+            # TODO
+            wd_country = river_data.Wikidata(country)
+            country_row = [wd_country.wdid_link,
+                           wd_country.name,
+                           '<a href="countries/%i.txt">txt</a>' %(country),
+                           '%i / %i' %(len(selection)-1, destlevel),
+                           '',
+                           '']
+            country_rows.append('<tr><td>' + '</td><td>'.join(country_row) + '</td></tr>')
+    
+        ## index for all countries
+        template = string.Template(open(os.path.join(TEMPLATEDIR,'wikidata_countries.html')).read())
+        subst = {'ROWS': '\n'.join(country_rows).encode('ascii','xmlcharrefreplace'),
+                 'DATE': time.strftime("%Y-%m-%d")}
+        filename = os.path.join(OUTDIR, 'index.html')
+        open(filename,'wt').write(template.safe_substitute(subst))
+        
+    def write_osm(self, outfile):
+        """
+        write all elementes to a file, which have a osm_id
+        """
+        levelstack = [-1]*100
+        selection = set()
+        for i, objl in enumerate(self.objlist):
+            obj, level = objl
+            levelstack[level] = i
+            if obj.osm_relid and type(obj) == OsmRiver:
+                selection |= set(levelstack[:level+1])
+                #if level > 1:
+                #    selection.add(i-1)
+                
+        ## write selection to a txt file
+        fid = io.open(outfile, 'wt', encoding='utf-8')
+        fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+        for i, objl in enumerate(self.objlist):
+            obj, level = objl
+            if i in selection:
+                if type(obj) == Waterarea:
+                    wd_area = river_data.Wikidata(obj.wd_id)
+                    obj.name = wd_area.name
+                fid.write(obj.write(level) + '\n')
+        fid.close()
+
         
 #################### FUNCTIONS
 def readjson_waterways():
@@ -303,158 +490,15 @@ def retrieve_wikidata():
         answ = urllib.urlopen(url)
         data = answ.read()
         open(os.path.join(OUTDIR, r_type + '.json'), 'wt').write(data)
-      
-def analyse_wikidata(osmrivers={}):
-    """
-    read river and waterarea data and analyse it
-    """
-    rivers = readjson_waterways()
-    waterareas = readjson_waterareas()
-    
-    ## preprocessing of river items
-    no_mouth = []
-    unknown_mouth = []    
-    for w_id, ww in rivers.items():
-        if ww.mouth_waterway in rivers:
-            rivers[ww.mouth_waterway].sidestreams.append(ww)
-        elif ww.mouth_waterway in waterareas:
-            waterareas[ww.mouth_waterway].inflows.append(ww)          
-        elif ww.mouth_waterway > 0:
-            unknown_mouth.append(ww)
-        else:
-            no_mouth.append(ww)
-        for n, po in enumerate(ww.part_of):
-            if po in rivers:
-                rivers[po].has_part.append(ww)
-            else:
-                print "river part_of not found", ww.wd_id, po
-        for n, lor in enumerate(ww.lakes_onriver):
-            if lor in waterareas:
-                ww.lakes_onriver[n] = waterareas[lor]
-            else:
-                ww.lakes_onriver[n] = None
-
-    ## preprocessing of waterarea items    
-    no_part = []
-    for w_id, wa, in waterareas.items():
-        if wa.part_of in waterareas:
-            waterareas[wa.part_of].subparts.append(wa)
-        elif wa.part_of in rivers:
-            rivers[wa.part_of].has_part.append(wa)
-        elif wa.outflow in rivers:
-            rivers[wa.outflow].lakes_onriver.append(wa)
-        else:
-            no_part.append(wa)
-
-    ## preporcessing of osmriver items
-    for osmid, osmriver in osmrivers.iteritems():
-        for i, sidestream in enumerate(osmriver.sidestreams):
-            osmriver.sidestreams[i] = osmrivers[sidestream]
-        if osmriver.wd_id:
-            wdid = int(osmriver.wd_id[1:])
-            if wdid in rivers:
-                rivers[wdid].osmriver = osmriver
-    
-    ## need a list for the result and a set of all wikidata objects that will be visited
-    visited = set(rivers.values()) | set(waterareas.values()) | set(osmrivers.values())
-    objlist = []
-
-    ## start traversing with waterareas that are not part of other areas    
-    for wa in sorted(no_part):
-        if not (len(wa.subparts) + len(wa.inflows)):
-            continue
-        if wa in visited:
-            wa.traverse(1,visited,objlist)
-        
-    ## collect all rivers with present, but unknown destination
-    for river in sorted(unknown_mouth):
-        if river in visited:
-            river.traverse(1, visited, objlist)
-    
-    ## collect all the rest of the watercourses    
-    for river in sorted(no_mouth):
-        if river.mouth_waterway == -1:
-            river.traverse(1,visited, objlist)
-
-    ## collect all rivers only present in osm
-    osmrivers_unvisited = set(osmrivers.values()) & visited
-    print len(osmrivers_unvisited)
-    for osmriver in list(osmrivers_unvisited):
-        osmrivers_unvisited -= set(osmriver.sidestreams)
-    print len(osmrivers_unvisited)
-    for osmriver in osmrivers_unvisited:
-        osmriver.traverse(1,visited, objlist)
-    osmrivers_unvisited = set(osmrivers.values()) & visited
-    print len(osmrivers_unvisited)
-    for osmriver in osmrivers_unvisited:
-        osmriver.traverse(1,visited, objlist)
-
-    ## write the whole object list into a text file
-    fid = io.open(os.path.join(OUTDIR, 'wikidata_tree.txt'), 'wt', encoding='utf-8')
-    fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
-    for obj, level in objlist:
-        fid.write(obj.write(level) + '\n')
-    ## write the whole object list into a html file
-    # TODO
-    
-    ## create lists for eatch country
-    # collect all countries in a set first    
-    countries = set()  # of wikidata ids
-    for i, r in rivers.iteritems():
-        countries |= set(r.countries)
-
-    country_rows = []    
-    for country in sorted(countries):
-        levelstack = [-1]*100
-        countrystack = [-1]*100
-        selection = set()
-        for i, objl in enumerate(objlist):
-            obj, level = objl
-            levelstack[level] = i
-            countrystack[level] = -1
-            if obj.countries:
-                if country in obj.countries:
-                    countrystack[level] = country
-            else:
-                if countrystack[level-1] == country:
-                    countrystack[level] = country
-                    
-            if country == countrystack[level]:
-                selection |= set(levelstack[:level+1])
-
-        ## write a txt file for each country
-        fid = io.open(os.path.join(OUTDIR, 'countries', '%i.txt' %country), 'wt', encoding='utf-8')
-        fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
-        destlevel = 0
-        for i, objl in enumerate(objlist):
-            obj, level = objl
-            if i in selection:
-                fid.write(obj.write(level) + '\n')
-                if level == 1:
-                    destlevel += 1
-        fid.close()
-        ## write a html file for each country
-        # TODO
-        wd_country = river_data.Wikidata(country)
-        country_row = [wd_country.wdid_link,
-                       wd_country.name,
-                       '<a href="countries/%i.txt">txt</a>' %(country),
-                       '%i / %i' %(len(selection)-1, destlevel),
-                       '',
-                       '']
-        country_rows.append('<tr><td>' + '</td><td>'.join(country_row) + '</td></tr>')
-
-    ## index for all countries
-    template = string.Template(open(os.path.join(TEMPLATEDIR,'wikidata_countries.html')).read())
-    subst = {'ROWS': '\n'.join(country_rows).encode('ascii','xmlcharrefreplace'),
-             'DATE': time.strftime("%Y-%m-%d")}
-    filename = os.path.join(OUTDIR, 'index.html')
-    open(filename,'wt').write(template.safe_substitute(subst))
 
 
 #################### MAIN
 if __name__ == '__main__':
     retrieve_wikidata()
-    analyse_wikidata()
+    analyser = WD_Analyser({})
+    analyser.write()
+    analyser.write_countries()
+    
+    
 
         
