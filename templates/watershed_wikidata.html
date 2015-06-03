@@ -12,16 +12,12 @@
   <body>
     <small>last update: $DATE</small>
     <hr>
-    <h2>OSM Waterway Relation List </h2> 
-
-    <h3> Statistic </h3>
-    <b>Number of relations:</b> $RELATION_COUNT <br>
-    <b>Ways inside relations:</b> $WAY_RELATIONS <br>
-    <b>Way interconnection nodes:</b> $CONNECTIONS <br>
+    <h2>OSM Waterway Relation List with wikidata </h2> 
 
     <h3> Misc </h3>
     <b>Relation connection table:</b> <a href="relations_up.txt"> upstream relations</a> (format is "relationid=[source relationids]")<br>
     <b>Hierachical table with wikidata connections:</b> <a href="wikidata_osm.html"> osm analyzed together with Wikidata</a> (<a href="wikidata_osm.txt"> as txt file</a>) <br>
+    <b>Hierarchical List:</b> <a href="hierarchical.html">hierarchical relation table</a><br>
     <b>Flat List:</b> <a href="flat.html">Flat relation table</a><br>
   
     <h3>Hierarchical Relation Table</h3>
@@ -29,24 +25,24 @@
     <b>row colors</b>
     <table>
       <tr>
-	  <td bgcolor="#7777FF">river flows into an ocean or endoric sea</td> 
-	  <td bgcolor="#FFFF77">river flows into an ocean by a river that only exist outside of the current area</td> 
+	  <td bgcolor="#3333FF">ocean or endoric sea</td> 
+	  <td bgcolor="#7777FF">lakes and other waterareas</td> 
 	  <td bgcolor="#FF7777">river without destination</td>
       </tr>
     </table><br>
 
     <table>
         <tr>
-          <th> level</th>
-          <th> relation (details)</th>
-          <th> name</th>
-          <th> reference</th>
-	  <th> destination / tributary_of</th>
-	  <th> way members </th>
-	  <th> downstream relations</th>
-	  <th> upstream relations</th>
-	  <th> down ways </th>
-	  <th> up ways </th>
+          <th>level</th>
+          <th>osm_id</th>
+          <th>wd_id</th>
+          <th>name</th>
+	  <th>type</th>
+	  <th>destination</th>
+	  <th>lat</th>
+	  <th>lon</th>
+	  <th>wikipedia</th>
+	  <th>notes</th>
         </tr>
 
 <!-- ROWS replacement start -->
@@ -59,7 +55,7 @@ $ROWS
     <address><a href="mailto:werner.ho@gmx.de">Werner Hoch</a></address>
 <!-- Created: Fri Jun 12 07:37:16 CEST 2009 -->
 <!-- hhmts start -->
-Last modified: Sat May 30 08:50:42 CEST 2015
+Last modified: Wed Jun  3 15:24:33 CEST 2015
 <!-- hhmts end -->
   </body>
 </html>

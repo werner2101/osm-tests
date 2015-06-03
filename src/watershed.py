@@ -159,7 +159,8 @@ class WaterwayRelationScanner(object):
         open(filename,'wt').write(template.safe_substitute(subst))
         
         wd_analyser = wikidata_rivers.WD_Analyser(osmrivers)
-        wd_analyser.write_osm(os.path.join(self.outdir, 'wikidata_osm.txt'))
+        wd_analyser.write_osm(os.path.join(self.outdir, 'wikidata_osm.txt'),
+                              os.path.join(self.outdir, 'wikidata_osm.html'))
 
         count = 1
         htmlrows = []

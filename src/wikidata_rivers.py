@@ -32,9 +32,12 @@ TOOLSERVER='https://wdq.wmflabs.org/api'
 WATERWAYS = [('573344', 'mainstem'),
              ('4022', 'river'),
              ('47521', 'stream'),
+             ('1437299', 'torrent'),
+             ('2048319','ditch'),
              ('27250','tidal creek'),
              ('12284', 'canal'),
              ('523166','gracht'),
+             ('708457','wetering'),
 #             ('34038','waterfall'),
              ('355304','watercourse'),
              ('166620','drainage basin'),
@@ -48,6 +51,7 @@ WATERAREAS = [('9430','ocean'),
               ('37901','strait'),
               ('1322134','gulf'),
               ('39594','bay'),
+              ('812585','bayou'),
               ('283202','harbor'),
               ('1172599','inlet'),
               ('491713','sound'),
@@ -127,6 +131,25 @@ class River(object):
                          ' '.join([str(i) for i in self.countries]),
                          ' '.join([str(i) for i in self.adminarea])
                          ])
+
+    def write_html(self,level):
+        if self.mouth_waterway > 0:
+            mouth = self.mouth_waterway
+        else:
+            mouth = self.mouth_area
+        if level == 1:
+            color = ' bgcolor="#FF8888"'
+        else:
+            color = ''
+
+        cells = ['.'*(level-1)+str(level), str(self.osm_relid),
+                 str(self.wd_id), self.name, 
+                 str(self._type), str(mouth),
+                 self.coords[0].replace('.',','), self.coords[1].replace('.',','),
+                 '', 
+                 '' # misc
+                 ]
+        return '<tr' + color + '><td>' + '</td><td>'.join(cells) + '</td></tr>'
             
     def __cmp__(self, other):
         assert isinstance(other, River)
@@ -166,6 +189,27 @@ class OsmRiver(object):
                         '', # countries
                         '', # adminarea
                          ])
+
+    def write_html(self,level):
+        if self.wd_id:
+            wd_id = self.wd_id[1:]
+        else:
+            wd_id = ''
+
+        if level == 1:
+            color = ' bgcolor="#FF7777"'
+        else:
+            color = ''
+        
+        cells = ['.'*(level-1)+str(level), str(self.osm_relid),
+                 wd_id, self.name, 
+                 str(self.type_), self.destination,
+                 '', # lat
+                 '', # lon
+                 self.wikipedia, 
+                 '', # misc
+                 ]
+        return '<tr'+color+'><td>' + '</td><td>'.join(cells) + '</td></tr>'
         
     def __cmp__(self, other):
         assert isinstance(other, OsmRiver)
@@ -210,16 +254,21 @@ class Waterarea(object):
                          ' '.join([str(i) for i in self.countries]),
                          ' '.join([str(i) for i in self.adminarea])
                          ])
-    def writehtml(self, level):
-        cells = ['.'*(level-1)+str(level),
-                 '<a href="https://www.wikidata.org/wiki/Q%i">%i</a>' %(self.wd_id, self.wd_id),
-                 self.name,
-                 '<a href="http://www.openstreetmap.org/relation/%i>%i</a>' %(self.osm_relid, self.osm_relid),
-                 str(self._type),
-                 '<a href="https://www.wikidata.org/wiki/Q%i">%i</a>' %(self.part_of, self.part_of),
-                 'FIXME'
-                ]
-        return '<tr><td>' + '</td><td>'.join(cells) + '</td></tr>' 
+
+    def write_html(self,level):
+        cells = ['.'*(level-1)+str(level), str(self.osm_relid),
+                 str(self.wd_id), self.name, 
+                 str(self._type), str(self.part_of),
+                 self.coords[0].replace('.',','), self.coords[1].replace('.',','),
+                 '', 
+                 '', # misc
+                 ]
+        if self._type in ['ocean', 'sea']:
+            color = ' bgcolor="#3333FF"'
+        else:
+            color = ' bgcolor="#7777FF"'
+            
+        return '<tr' + color + '><td>' + '</td><td>'.join(cells) + '</td></tr>'
             
     def __cmp__(self, other):
         assert isinstance(other, Waterarea)
@@ -380,7 +429,7 @@ class WD_Analyser(object):
         filename = os.path.join(OUTDIR, 'index.html')
         open(filename,'wt').write(template.safe_substitute(subst))
         
-    def write_osm(self, outfile):
+    def write_osm(self, outfile, html_outfile=None):
         """
         write all elementes to a file, which have a osm_id
         """
@@ -405,6 +454,25 @@ class WD_Analyser(object):
                     obj.name = wd_area.name
                 fid.write(obj.write(level) + '\n')
         fid.close()
+        
+        ## create html output file
+        if not html_outfile:
+            return
+
+        river_rows = []
+        for i, objl in enumerate(self.objlist):
+            obj, level = objl
+            if i in selection:
+                if type(obj) == Waterarea:
+                    wd_area = river_data.Wikidata(obj.wd_id)
+                    obj.name = wd_area.name
+                river_rows.append(obj.write_html(level))
+            
+        template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_wikidata.html')).read())
+        subst = {'ROWS': '\n'.join(river_rows).encode('ascii','xmlcharrefreplace'),
+                 'DATE': time.strftime("%Y-%m-%d")}
+        filename = os.path.join(html_outfile)
+        open(filename,'wt').write(template.safe_substitute(subst))
 
         
 #################### FUNCTIONS
