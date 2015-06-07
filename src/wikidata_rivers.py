@@ -35,6 +35,7 @@ WATERWAYS = [('573344', 'mainstem'),
              ('1437299', 'torrent'),
              ('2048319','ditch'),
              ('27250','tidal creek'),
+             ('187971','wadi'),
              ('12284', 'canal'),
              ('523166','gracht'),
              ('708457','wetering'),
@@ -54,6 +55,7 @@ WATERAREAS = [('9430','ocean'),
               ('812585','bayou'),
               ('283202','harbor'),
               ('1172599','inlet'),
+              ('554394','ria'),
               ('491713','sound'),
               ('31615','cove'),
               ('558116','firth'),
@@ -65,6 +67,7 @@ WATERAREAS = [('9430','ocean'),
               ('23397','lake'),
               ('211302','glacial lake'),
               ('188025','salt lake'),
+              ('11349558','soda lake'),
               ('935277','salt pan'),
               ('6341928','rift lake'),
               ('204324','crater lake'),
@@ -132,13 +135,15 @@ class River(object):
                          ' '.join([str(i) for i in self.adminarea])
                          ])
 
-    def write_html(self,level):
+    def write_html(self,level,parent_rivers=[]):
         if self.mouth_waterway > 0:
             mouth = self.mouth_waterway
         else:
             mouth = self.mouth_area
         if level == 1:
             color = ' bgcolor="#FF8888"'
+        elif len(parent_rivers) == 0:
+            color = ' bgcolor="#77FF77"'
         else:
             color = ''
 
@@ -190,7 +195,7 @@ class OsmRiver(object):
                         '', # adminarea
                          ])
 
-    def write_html(self,level):
+    def write_html(self,level,parent_rivers=[]):
         if self.wd_id:
             wd_id = self.wd_id[1:]
         else:
@@ -198,6 +203,8 @@ class OsmRiver(object):
 
         if level == 1:
             color = ' bgcolor="#FF7777"'
+        elif len(parent_rivers) == 0:
+            color = ' bgcolor="#77FF77"'
         else:
             color = ''
         
@@ -255,7 +262,7 @@ class Waterarea(object):
                          ' '.join([str(i) for i in self.adminarea])
                          ])
 
-    def write_html(self,level):
+    def write_html(self,level,**kwargs):
         cells = ['.'*(level-1)+str(level), str(self.osm_relid),
                  str(self.wd_id), self.name, 
                  str(self._type), str(self.part_of),
@@ -382,6 +389,7 @@ class WD_Analyser(object):
         for i, r in self.rivers.iteritems():
             countries |= set(r.countries)
         country_rows = []    
+        known_country = set()
         for country in sorted(countries):
             levelstack = [-1]*100
             countrystack = [-1]*100
@@ -399,6 +407,8 @@ class WD_Analyser(object):
                         
                 if country == countrystack[level]:
                     selection |= set(levelstack[:level+1])
+                
+            known_country |= selection
     
             ## write a txt file for each country
             fid = io.open(os.path.join(OUTDIR, 'countries', '%i.txt' %country), 'wt', encoding='utf-8')
@@ -408,19 +418,37 @@ class WD_Analyser(object):
                 obj, level = objl
                 if i in selection:
                     fid.write(obj.write(level) + '\n')
-                    if level == 1:
+                    if level == 1 and type(obj) == River:
                         destlevel += 1
             fid.close()
+            
             ## write a html file for each country
             # TODO
             wd_country = river_data.Wikidata(country)
             country_row = [wd_country.wdid_link,
                            wd_country.name,
                            '<a href="countries/%i.txt">txt</a>' %(country),
-                           '%i / %i' %(len(selection)-1, destlevel),
+                           '%i/%i, %.1f%%' %(len(selection)-1, destlevel, 100-100*(float(destlevel)/(len(selection)-1))),
                            '',
                            '']
             country_rows.append('<tr><td>' + '</td><td>'.join(country_row) + '</td></tr>')
+
+        ## no country found
+        fid = io.open(os.path.join(OUTDIR, 'countries', 'unknown.txt'), 'wt', encoding='utf-8')
+        fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+        for i, objl in enumerate(self.objlist):
+            obj, level = objl
+            if i not in known_country:
+                fid.write(obj.write(level) + '\n')
+        fid.close()
+        unknown_row = ['--',
+                       'unknown',
+                       '<a href="countries/unknown.txt">txt</a>',
+                       '%i' % (len(self.objlist) - len(known_country)),
+                       '',
+                       '']
+
+        country_rows.append('<tr><td>' + '</td><td>'.join(unknown_row) + '</td></tr>')
     
         ## index for all countries
         template = string.Template(open(os.path.join(TEMPLATEDIR,'wikidata_countries.html')).read())
@@ -460,13 +488,16 @@ class WD_Analyser(object):
             return
 
         river_rows = []
-        for i, objl in enumerate(self.objlist):
-            obj, level = objl
+        obj_stack = [None]*100
+        for i, obj in enumerate(self.objlist):
+            obj, level = obj
+            obj_stack[level-1] = obj
             if i in selection:
                 if type(obj) == Waterarea:
                     wd_area = river_data.Wikidata(obj.wd_id)
                     obj.name = wd_area.name
-                river_rows.append(obj.write_html(level))
+                parent_rivers = [ r for r in obj_stack[:level-1] if type(r) in (OsmRiver,River)]
+                river_rows.append(obj.write_html(level,parent_rivers=parent_rivers))
             
         template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_wikidata.html')).read())
         subst = {'ROWS': '\n'.join(river_rows).encode('ascii','xmlcharrefreplace'),
@@ -497,6 +528,8 @@ def readjson_waterways():
         for wd_id, type_, coord in jdata['props'].get('625',[]):
             rivers[wd_id].coords = coord.split('|')[:2]
         for wd_id, type_, country in jdata['props'].get('17',[]):
+            rivers[wd_id].countries.append(country)
+        for wd_id, type_, country in jdata['props'].get('205',[]):
             rivers[wd_id].countries.append(country)
         for wd_id, type_, continent in jdata['props'].get('30',[]):
             rivers[wd_id].continents.append(continent)
@@ -531,6 +564,8 @@ def readjson_waterareas():
             waterareas[wd_id].coords = coord.split('|')[:2]
         for wd_id, type_, country in jdata['props'].get('17',[]):
             waterareas[wd_id].countries.append(country)
+        for wd_id, type_, country in jdata['props'].get('205',[]):
+            waterareas[wd_id].countries.append(country)
         for wd_id, type_, continent in jdata['props'].get('30',[]):
             waterareas[wd_id].continents.append(continent)
         for wd_id, type_, adminarea in jdata['props'].get('131',[]):
@@ -547,14 +582,14 @@ def retrieve_wikidata():
     """
     for i_id, r_type in WATERWAYS:
         print i_id, r_type
-        url = TOOLSERVER + '?q=claim[31:%s]&props=402,403,31,625,17,30,131,469,361' %i_id
+        url = TOOLSERVER + '?q=claim[31:%s]&props=402,403,31,625,17,30,131,469,361,205' %i_id
         answ = urllib.urlopen(url)
         data = answ.read()
         open(os.path.join(OUTDIR, r_type + '.json'), 'wt').write(data)
     
     for i_id, r_type in WATERAREAS:
         print i_id, r_type
-        url = TOOLSERVER + '?q=claim[31:%s]&props=402,31,625,17,30,131,361,201' %i_id
+        url = TOOLSERVER + '?q=claim[31:%s]&props=402,31,625,17,30,131,361,201,205' %i_id
         answ = urllib.urlopen(url)
         data = answ.read()
         open(os.path.join(OUTDIR, r_type + '.json'), 'wt').write(data)
