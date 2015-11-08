@@ -12,6 +12,7 @@ import mwparserfromhell as mwp
 
 sys.path.append('../python-osm/src/')
 from osm import pyosm, osmdb
+import countries
 
 ##################### CONSTANTS
 VERSION = '0.0.1'
@@ -28,20 +29,85 @@ WIKIPEDIA_SERVER={'en':'http://en.wikipedia.org/w/api.php',
                   'es':'http://es.wikipedia.org/w/api.php',
                   'fr':'http://fr.wikipedia.org/w/api.php'}
 
+PLANET = '/store/osm/planet-latest.osm'
+SCRIPTDIR = os.path.dirname(os.path.realpath(__file__))
+BASEDIR = os.path.join(SCRIPTDIR, '../')
+COUNTRYFILE = os.path.join(BASEDIR, 'countries/TM_WORLD_BORDERS-0.3.shp')
 
 ##################### CLASSES
 
 class OsmRiverDB(object):
-    def __init__(self, filename=''):
+    def __init__(self, filename='osmriverdb.txt'):
         self.filename = filename
-        self.rivers = {}  ## dict of dictionaries (key is relid)
+        self.rivers = {}  ## dict of dictionaries (key is str(relid)
         
         if filename:
             self.read_file()
+        
+        self.odb = osmdb.OsmDb(PLANET)
+        self.countrycheck = countries.CountryChecker(COUNTRYFILE)
+        
+    def read_file(self):
+        
+        if not os.path.exists(self.filename):
+            return
+        for line in open(self.filename).readlines()[1:]:
+            toks = line.strip().split('\t')
+            if len(toks) < 6:
+                continue
+            prop = {'rid': toks[0],
+                    'version':toks[1],
+                    'coords': (toks[2], toks[3]),  # lat, lon
+                    'distance': float(toks[4]),
+                    'country': toks[5]}
+            self.rivers[toks[0]] = prop
     
-    def add_river(self, **kwargs):
-        self.rivers[kwargs['relid']] = kwargs
+    def write_file(self):
+        fid = open(self.filename,'w')
+        fid.write('HEADLINE\n')
+        for rid, prop in self.rivers.iteritems():
+            col = [prop['rid'],
+                   prop['version'],
+                   prop['coords'][0],
+                   prop['coords'][1],
+                   str(prop['distance']),
+                   prop['country']]
+            fid.write('\t'.join(col))
+            fid.write('\n')
+        fid.close()
+            
+    
+    def get_riverprop(self,rid,version):
+        rprop = self.rivers.get(str(rid),{})
+        if rprop.get('version','') == str(version):
+            return rprop
+        
+        data = self.odb.get_objects_recursive('relation', [int(rid)], recursive=True)
+        osmfile = pyosm.OSMXMLFile(content = osmdb.OSMHEAD + data + osmdb.OSMTAIL)
+        if int(rid) not in osmfile.relations:
+            return {}
+        
+        rel = osmfile.relations[int(rid)]
+        bb = rel.bbox(recursive=False)
+        if not bb:
+            return {}
 
+        rprop = {}        
+        rprop['coords'] = (str((bb[0] + bb[1]) / 2), str((bb[2] + bb[3]) / 2))
+        rprop['distance'] = rel.distance(roles=['main_stream',''], recursive=False)
+        rprop['version'] = str(rel.version)
+        rprop['rid'] = str(rid)
+        
+        lat, lon = rprop['coords']
+        if lat and lon:
+            p = countries.Point(float(lat),float(lon))
+            c = self.countrycheck.getCountry(p)
+            if c:
+                rprop['country'] = c.iso
+            else:
+                rprop['country'] = ''
+        self.rivers[rid] = rprop
+        return rprop
 
 class OsmRiver(object):
     def __init__(self, relid):
@@ -50,6 +116,7 @@ class OsmRiver(object):
         self.wikipedia = ''
         self.wikidata = ''
         self.name = ''
+        self.version = ''
         
         self.get_data()
         self.read_data()

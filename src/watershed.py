@@ -121,6 +121,7 @@ class WaterwayRelationScanner(object):
             osmriver.destination = rel.tags.get('destination', '')
             osmriver.sidestreams = list(up)
             osmriver.wd_id = rel.tags.get('wikidata', '')
+            osmriver.version = rel.version
             osmrivers[relid] = osmriver
             
             row = ['xx', # place holder for level column
@@ -135,7 +136,6 @@ class WaterwayRelationScanner(object):
                     str(stat['upstream_ways']),
                     ]
             rows[relid] = row
-            
 
         tree = self.traverse_relations()
         colors = {'dest':' bgcolor="#7777FF"',
@@ -161,6 +161,7 @@ class WaterwayRelationScanner(object):
         wd_analyser = wikidata_rivers.WD_Analyser(osmrivers)
         wd_analyser.write_osm(os.path.join(self.outdir, 'wikidata_osm.txt'),
                               os.path.join(self.outdir, 'wikidata_osm.html'))
+        wd_analyser.write_countries(prefix='osm_')
 
         count = 1
         htmlrows = []

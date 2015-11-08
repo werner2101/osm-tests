@@ -20,12 +20,14 @@ else:
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import river_data
+import countries
     
 #################### CONST
 SCRIPTDIR = os.path.dirname(os.path.realpath(__file__))
 BASEDIR = os.path.join(SCRIPTDIR, '../')
 TEMPLATEDIR = os.path.join(BASEDIR, 'templates')
 OUTDIR = os.path.join(SCRIPTDIR, '../../../data/07.1_watershed_data/')
+COUNTRYFILE = os.path.join(BASEDIR, 'countries/TM_WORLD_BORDERS-0.3.shp')
 
 TOOLSERVER='https://wdq.wmflabs.org/api'
 
@@ -37,6 +39,7 @@ WATERWAYS = [('573344', 'mainstem'),
              ('27250','tidal creek'),
              ('187971','wadi'),
              ('12284', 'canal'),
+             ('1009249', 'bundeswasserstrasse'),
              ('523166','gracht'),
              ('708457','wetering'),
 #             ('34038','waterfall'),
@@ -71,7 +74,7 @@ WATERAREAS = [('9430','ocean'),
               ('935277','salt pan'),
               ('6341928','rift lake'),
               ('204324','crater lake'),
-              ('12779976','endoheic lake'),
+              ('9019918','endoheic lake'),
               ('7205721','pluvial lake'),
               ('2915867','rift valley lake'),
               ('1165822','meromictic lake'),
@@ -100,6 +103,7 @@ class River(object):
         self.coords = ('','')
         self.adminarea = []
         self.countries = []
+        self.country2 = ''    # ISO code from geo coder
         self.continents = []
         self.osmriver =  None
         
@@ -131,7 +135,7 @@ class River(object):
                          str(self._type), str(mouth),
                          self.coords[0].replace('.',','), self.coords[1].replace('.',','),
                          ' '.join([str(i) for i in self.continents]),
-                         ' '.join([str(i) for i in self.countries]),
+                         ' '.join([str(i) for i in self.countries]) + ' ' + self.country2,
                          ' '.join([str(i) for i in self.adminarea])
                          ])
 
@@ -152,7 +156,8 @@ class River(object):
                  str(self._type), str(mouth),
                  self.coords[0].replace('.',','), self.coords[1].replace('.',','),
                  '', 
-                 '' # misc
+                 '', # misc
+                 self.country2,
                  ]
         return '<tr' + color + '><td>' + '</td><td>'.join(cells) + '</td></tr>'
             
@@ -163,13 +168,17 @@ class River(object):
 class OsmRiver(object):
     def __init__(self, osmid):
         self.osm_relid = osmid
+        self.version = ''
         self.type_ = ''
         self.name = ''
         self.wd_id = ''
         self.wikipedia = []
         self.destination = ''
         self.sidestreams = set([])
+        self.coords = ('','')
+        self.distance = 0
         self.countries = []
+        self.country2 = ''    # ISO code from geo coder
 
     def traverse(self, level, visited, objlist):
         if self in visited:
@@ -188,11 +197,11 @@ class OsmRiver(object):
         else:
             wd_id = ''
         return u'\t'.join(['.'*(level-1)+str(level), wd_id, self.name, str(self.osm_relid),
-                         str(self.type_), self.destination,
-                        '', # coords
-                        '', # continents
-                        '', # countries
-                        '', # adminarea
+                           str(self.type_), self.destination,
+                           self.coords[0].replace('.',','), self.coords[1].replace('.',','),
+                           '',
+                           ' '.join([str(i) for i in self.countries]) + ' ' + self.country2,
+                           '', # adminarea
                          ])
 
     def write_html(self,level,parent_rivers=[]):
@@ -211,10 +220,11 @@ class OsmRiver(object):
         cells = ['.'*(level-1)+str(level), str(self.osm_relid),
                  wd_id, self.name, 
                  str(self.type_), self.destination,
-                 '', # lat
-                 '', # lon
+                 self.coords[0], # lat
+                 self.coords[1], # lon
                  self.wikipedia, 
-                 '', # misc
+                 '%.2f' % (self.distance/1000), # river distance
+                 self.country2,
                  ]
         return '<tr'+color+'><td>' + '</td><td>'.join(cells) + '</td></tr>'
         
@@ -237,6 +247,7 @@ class Waterarea(object):
         self.coords = ('','')
         self.adminarea = []
         self.countries = []
+        self.country2 = ''    # ISO code from geo coder
         self.continents = []
 
     def traverse(self, level, visited, objlist):
@@ -269,6 +280,7 @@ class Waterarea(object):
                  self.coords[0].replace('.',','), self.coords[1].replace('.',','),
                  '', 
                  '', # misc
+                 self.country2,
                  ]
         if self._type in ['ocean', 'sea']:
             color = ' bgcolor="#3333FF"'
@@ -287,6 +299,7 @@ class WD_Analyser(object):
         self.osmrivers = osmrivers
         self.objlist = []
         
+        self.river_geometry()
         self.read()
         self.analyse()
     
@@ -297,6 +310,23 @@ class WD_Analyser(object):
         self.rivers = readjson_waterways()
         self.waterareas = readjson_waterareas()
     
+    def river_geometry(self):
+        if not self.osmrivers:
+            return
+        rdb = river_data.OsmRiverDB()
+        counter = 0
+        for rid, river in self.osmrivers.iteritems():
+            geoprop = rdb.get_riverprop(rid,river.version)
+            print rid, geoprop
+            river.coords = geoprop.get('coords',('',''))
+            river.distance = geoprop.get('distance', 0)
+            river.country2 = geoprop.get('country','')
+            counter += 1
+            if counter % 100 == 0:
+                rdb.write_file()
+            
+        rdb.write_file()
+        
     def analyse(self):
         ## preprocessing of river items
         no_mouth = []
@@ -341,6 +371,9 @@ class WD_Analyser(object):
                 wdid = int(osmriver.wd_id[1:])
                 if wdid in self.rivers:
                     self.rivers[wdid].osmriver = osmriver
+                    osmriver.countries = self.rivers[wdid].countries
+                    osmriver.country2 = self.rivers[wdid].country2
+                    #osmriver.coords = self.rivers[wdid].coords
         
         ## need a list for the result and a set of all wikidata objects that will be visited
         visited = set(self.rivers.values()) | set(self.waterareas.values()) | set(self.osmrivers.values())
@@ -382,7 +415,7 @@ class WD_Analyser(object):
         for obj, level in self.objlist:
             fid.write(obj.write(level) + '\n')
    
-    def write_countries(self):
+    def write_countries(self, prefix=''):
         ## create lists for eatch country
         # collect all countries in a set first    
         countries = set()  # of wikidata ids
@@ -411,7 +444,7 @@ class WD_Analyser(object):
             known_country |= selection
     
             ## write a txt file for each country
-            fid = io.open(os.path.join(OUTDIR, 'countries', '%i.txt' %country), 'wt', encoding='utf-8')
+            fid = io.open(os.path.join(OUTDIR, 'countries', '%s%i.txt' %(prefix,country)), 'wt', encoding='utf-8')
             fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
             destlevel = 0
             for i, objl in enumerate(self.objlist):
@@ -429,12 +462,12 @@ class WD_Analyser(object):
                            wd_country.name,
                            '<a href="countries/%i.txt">txt</a>' %(country),
                            '%i/%i, %.1f%%' %(len(selection)-1, destlevel, 100-100*(float(destlevel)/(len(selection)-1))),
-                           '',
+                           '<a href="countries/%s%i.txt">txt</a>' %(prefix,country),
                            '']
             country_rows.append('<tr><td>' + '</td><td>'.join(country_row) + '</td></tr>')
 
         ## no country found
-        fid = io.open(os.path.join(OUTDIR, 'countries', 'unknown.txt'), 'wt', encoding='utf-8')
+        fid = io.open(os.path.join(OUTDIR, 'countries', '%sunknown.txt' % prefix), 'wt', encoding='utf-8')
         fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
         for i, objl in enumerate(self.objlist):
             obj, level = objl
@@ -539,6 +572,15 @@ def readjson_waterways():
             rivers[wd_id].adminarea.append(adminarea)
         for wd_id, type_, lakes_river in jdata['props'].get('469',[]):
              rivers[wd_id].lakes_onriver.append(lakes_river)
+    
+    countrycheck = countries.CountryChecker(COUNTRYFILE)
+    for wd_id, r in rivers.iteritems():
+        lat, lon = r.coords
+        if lat and lon:
+            p = countries.Point(float(lat),float(lon))
+            c = countrycheck.getCountry(p)
+            if c:
+                r.country2 = c.iso
 
     return rivers
 
@@ -582,7 +624,7 @@ def retrieve_wikidata():
     """
     for i_id, r_type in WATERWAYS:
         print i_id, r_type
-        url = TOOLSERVER + '?q=claim[31:%s]&props=402,403,31,625,17,30,131,469,361,205' %i_id
+        url = TOOLSERVER + '?q=claim[31:%s]&props=402,403,31,625,17,30,131,469,361,205,1183' %i_id
         answ = urllib.urlopen(url)
         data = answ.read()
         open(os.path.join(OUTDIR, r_type + '.json'), 'wt').write(data)
