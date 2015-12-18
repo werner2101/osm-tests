@@ -179,6 +179,7 @@ class OsmRiver(object):
         self.distance = 0
         self.countries = []
         self.country2 = ''    # ISO code from geo coder
+        self.ref = ''
 
     def traverse(self, level, visited, objlist):
         if self in visited:
@@ -307,8 +308,8 @@ class WD_Analyser(object):
         """
         read river and waterarea data and analyse it
         """
-        self.rivers = readjson_waterways()
         self.waterareas = readjson_waterareas()
+        self.rivers = readjson_waterways()
     
     def river_geometry(self):
         if not self.osmrivers:
@@ -317,7 +318,6 @@ class WD_Analyser(object):
         counter = 0
         for rid, river in self.osmrivers.iteritems():
             geoprop = rdb.get_riverprop(rid,river.version)
-            print rid, geoprop
             river.coords = geoprop.get('coords',('',''))
             river.distance = geoprop.get('distance', 0)
             river.country2 = geoprop.get('country','')
@@ -456,7 +456,6 @@ class WD_Analyser(object):
             fid.close()
             
             ## write a html file for each country
-            # TODO
             wd_country = river_data.Wikidata(country)
             country_row = [wd_country.wdid_link,
                            wd_country.name,
@@ -490,7 +489,7 @@ class WD_Analyser(object):
         filename = os.path.join(OUTDIR, 'index.html')
         open(filename,'wt').write(template.safe_substitute(subst))
         
-    def write_osm(self, outfile, html_outfile=None):
+    def write_osm(self, outfile, outdir=None):
         """
         write all elementes to a file, which have a osm_id
         """
@@ -501,8 +500,6 @@ class WD_Analyser(object):
             levelstack[level] = i
             if obj.osm_relid and type(obj) == OsmRiver:
                 selection |= set(levelstack[:level+1])
-                #if level > 1:
-                #    selection.add(i-1)
                 
         ## write selection to a txt file
         fid = io.open(outfile, 'wt', encoding='utf-8')
@@ -517,7 +514,7 @@ class WD_Analyser(object):
         fid.close()
         
         ## create html output file
-        if not html_outfile:
+        if not outdir:
             return
 
         river_rows = []
@@ -535,8 +532,60 @@ class WD_Analyser(object):
         template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_wikidata.html')).read())
         subst = {'ROWS': '\n'.join(river_rows).encode('ascii','xmlcharrefreplace'),
                  'DATE': time.strftime("%Y-%m-%d")}
-        filename = os.path.join(html_outfile)
+        filename = os.path.join(outdir + 'wikidata_osm.html')
         open(filename,'wt').write(template.safe_substitute(subst))
+        
+        osm_sel = selection
+        
+        ## create html output file for each country
+        # collect all countries in a set first    
+        countries = set()  # of wikidata ids
+        for obj, level in self.objlist:
+            if type(obj) == OsmRiver:
+                countries.add(obj.country2)
+        countries.remove('')  # empty countries are unknown
+        country_rows = []     #TODO
+        known_country = set()
+        for country in sorted(countries):
+            levelstack = [-1]*100
+            countrystack = [-1]*100
+            selection = set()
+            for i, objl in enumerate(self.objlist):
+                obj, level = objl
+                levelstack[level] = i
+                countrystack[level] = -1
+                if type(obj) == OsmRiver:
+                    if country == obj.country2:
+                        countrystack[level] = country
+                else:
+                    if countrystack[level-1] == country:
+                        countrystack[level] = country
+                        
+                if country == countrystack[level]:
+                    selection |= set(levelstack[:level+1])
+                
+            known_country |= selection
+            
+            # write into text file
+            fid = io.open(os.path.join(outdir, 'wikidata_osm_'+country+'.txt'), 'wt', encoding='utf-8')
+            fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+            for i, objl in enumerate(self.objlist):
+                obj, level = objl
+                if i in selection and i in osm_sel:
+                    if type(obj) == Waterarea:
+                        wd_area = river_data.Wikidata(obj.wd_id)
+                        obj.name = wd_area.name
+                    fid.write(obj.write(level) + '\n')
+            fid.close()
+
+        ## no country found
+        fid = io.open(os.path.join(outdir, 'wikidata_osm_unknown.txt'), 'wt', encoding='utf-8')
+        fid.write(u'\t'.join(['Level','wd_id','name','osm_id','type','mouth','lat','lon','continent','country','admin'])+'\n')
+        for i, objl in enumerate(self.objlist):
+            obj, level = objl
+            if i not in known_country and i in osm_sel:
+                fid.write(obj.write(level) + '\n')
+        fid.close()
 
         
 #################### FUNCTIONS
@@ -572,6 +621,8 @@ def readjson_waterways():
             rivers[wd_id].adminarea.append(adminarea)
         for wd_id, type_, lakes_river in jdata['props'].get('469',[]):
              rivers[wd_id].lakes_onriver.append(lakes_river)
+        for wd_id, type_, wref in jdata['props'].get('1183',[]):
+             rivers[wd_id].ref = wref
     
     countrycheck = countries.CountryChecker(COUNTRYFILE)
     for wd_id, r in rivers.iteritems():
@@ -643,7 +694,3 @@ if __name__ == '__main__':
     analyser = WD_Analyser({})
     analyser.write()
     analyser.write_countries()
-    
-    
-
-        

@@ -48,7 +48,6 @@ class OsmRiverDB(object):
         self.countrycheck = countries.CountryChecker(COUNTRYFILE)
         
     def read_file(self):
-        
         if not os.path.exists(self.filename):
             return
         for line in open(self.filename).readlines()[1:]:
@@ -75,12 +74,14 @@ class OsmRiverDB(object):
             fid.write('\t'.join(col))
             fid.write('\n')
         fid.close()
-            
     
     def get_riverprop(self,rid,version):
-        rprop = self.rivers.get(str(rid),{})
+        rid = str(rid)
+        rprop = self.rivers.get(rid,{})
         if rprop.get('version','') == str(version):
             return rprop
+        else:
+            print 'riverprop not found: ', rid, version, rprop
         
         data = self.odb.get_objects_recursive('relation', [int(rid)], recursive=True)
         osmfile = pyosm.OSMXMLFile(content = osmdb.OSMHEAD + data + osmdb.OSMTAIL)
@@ -96,7 +97,7 @@ class OsmRiverDB(object):
         rprop['coords'] = (str((bb[0] + bb[1]) / 2), str((bb[2] + bb[3]) / 2))
         rprop['distance'] = rel.distance(roles=['main_stream',''], recursive=False)
         rprop['version'] = str(rel.version)
-        rprop['rid'] = str(rid)
+        rprop['rid'] = rid
         
         lat, lon = rprop['coords']
         if lat and lon:
@@ -107,6 +108,7 @@ class OsmRiverDB(object):
             else:
                 rprop['country'] = ''
         self.rivers[rid] = rprop
+        print '  new:', rid, self.rivers[rid]
         return rprop
 
 class OsmRiver(object):

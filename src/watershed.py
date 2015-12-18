@@ -4,7 +4,6 @@
 import sys, string, re, time, os
 from xml.sax import handler, make_parser
 import xml.sax.saxutils
-import codecs
 import numpy
 
 import watershed_config
@@ -160,7 +159,7 @@ class WaterwayRelationScanner(object):
         
         wd_analyser = wikidata_rivers.WD_Analyser(osmrivers)
         wd_analyser.write_osm(os.path.join(self.outdir, 'wikidata_osm.txt'),
-                              os.path.join(self.outdir, 'wikidata_osm.html'))
+                              self.outdir)
         wd_analyser.write_countries(prefix='osm_')
 
         count = 1
