@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Dec  4 09:21:51 2014
-
-@author: werner
-"""
-
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
@@ -33,19 +26,25 @@ TOOLSERVER='https://wdq.wmflabs.org/api'
 
 WATERWAYS = [('573344', 'mainstem'),
              ('4022', 'river'),
+             ('1140845','subterranean river'),
+             ('3529419','small river'),
              ('47521', 'stream'),
              ('1437299', 'torrent'),
              ('2048319','ditch'),
              ('27250','tidal creek'),
              ('187971','wadi'),
              ('12284', 'canal'),
+             ('8261440','canal for transporting water'),
+             ('5031071','canal tunnel'),
              ('1009249', 'bundeswasserstrasse'),
              ('523166','gracht'),
              ('708457','wetering'),
 #             ('34038','waterfall'),
              ('355304','watercourse'),
              ('166620','drainage basin'),
-             ('285451','drainage system')]
+             ('285451','drainage system'),
+             ('43197','river delta'),
+             ('591942','distributary')]
              
 WATERAREAS = [('9430','ocean'),
               ('165','sea'),
@@ -58,6 +57,7 @@ WATERAREAS = [('9430','ocean'),
               ('812585','bayou'),
               ('283202','harbor'),
               ('1172599','inlet'),
+              ('2923911',' empoldered inlet'),
               ('554394','ria'),
               ('491713','sound'),
               ('31615','cove'),
@@ -68,10 +68,12 @@ WATERAREAS = [('9430','ocean'),
               ('170321','wetland'),
               ('5926864','group of lakes'),
               ('23397','lake'),
+              ('3215290','artificial lake'),
               ('211302','glacial lake'),
               ('188025','salt lake'),
               ('11349558','soda lake'),
               ('935277','salt pan'),
+              ('14253637','dry lake'),
               ('6341928','rift lake'),
               ('204324','crater lake'),
               ('9019918','endoheic lake'),
@@ -457,12 +459,16 @@ class WD_Analyser(object):
             
             ## write a html file for each country
             wd_country = river_data.Wikidata(country)
+            osm_link = ''
+            if wd_country.iso:
+                osm_link = '<a href="../07_watershed/planet/wikidata_osm_%s.html">html</a>' %(wd_country.iso)
             country_row = [wd_country.wdid_link,
                            wd_country.name,
                            '<a href="countries/%i.txt">txt</a>' %(country),
                            '%i/%i, %.1f%%' %(len(selection)-1, destlevel, 100-100*(float(destlevel)/(len(selection)-1))),
                            '<a href="countries/%s%i.txt">txt</a>' %(prefix,country),
-                           '']
+                           osm_link
+                           ]
             country_rows.append('<tr><td>' + '</td><td>'.join(country_row) + '</td></tr>')
 
         ## no country found
@@ -477,7 +483,7 @@ class WD_Analyser(object):
                        'unknown',
                        '<a href="countries/unknown.txt">txt</a>',
                        '%i' % (len(self.objlist) - len(known_country)),
-                       '',
+                       '<a href="countries/wikidata_osm_unknown.txt">txt</a>',
                        '']
 
         country_rows.append('<tr><td>' + '</td><td>'.join(unknown_row) + '</td></tr>')
@@ -544,7 +550,6 @@ class WD_Analyser(object):
             if type(obj) == OsmRiver:
                 countries.add(obj.country2)
         countries.remove('')  # empty countries are unknown
-        country_rows = []     #TODO
         known_country = set()
         for country in sorted(countries):
             levelstack = [-1]*100
@@ -577,6 +582,22 @@ class WD_Analyser(object):
                         obj.name = wd_area.name
                     fid.write(obj.write(level) + '\n')
             fid.close()
+            # write into html file
+            river_rows = []
+            for i, objl in enumerate(self.objlist):
+                obj, level = objl
+                obj_stack[level-1] = obj
+                if i in selection and i in osm_sel:
+                    if type(obj) == Waterarea:
+                        wd_area = river_data.Wikidata(obj.wd_id)
+                        obj.name = wd_area.name
+                    parent_rivers = [ r for r in obj_stack[:level-1] if type(r) in (OsmRiver,River)]
+                    river_rows.append(obj.write_html(level,parent_rivers=parent_rivers))
+            template = string.Template(open(os.path.join(TEMPLATEDIR,'watershed_wikidata_country.html')).read())
+            subst = {'ROWS': '\n'.join(river_rows).encode('ascii','xmlcharrefreplace'),
+                     'DATE': time.strftime("%Y-%m-%d"), 'COUNTRY': country.upper()}
+            filename = os.path.join(outdir + 'wikidata_osm_'+country+'.html')
+            open(filename,'wt').write(template.safe_substitute(subst))
 
         ## no country found
         fid = io.open(os.path.join(outdir, 'wikidata_osm_unknown.txt'), 'wt', encoding='utf-8')

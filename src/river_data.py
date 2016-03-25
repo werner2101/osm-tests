@@ -154,6 +154,7 @@ class Wikidata(object):
         self.wdid = str(wdid)
         self.wdid_link = '<a href="https://www.wikidata.org/wiki/Q%s">Q%s</a>' %(wdid,wdid)
         self.name = ''
+        self.iso = ''
         self.jsondata = ''
         self.data = {}
         
@@ -180,6 +181,9 @@ class Wikidata(object):
         self.data = json.loads(self.jsondata)
         aliases = self.data.get('entities',{}).get('Q'+self.wdid,{}).get('labels',{})
         self.name = aliases.get('en',{}).get('value','')
+        isoclaim = self.data.get('entities',{}).get('Q'+self.wdid,{}).get('claims',{}).get('P297')
+        if isoclaim:
+            self.iso = isoclaim[0].get('mainsnak',{}).get('datavalue',{}).get('value','')
                 
     def __str__(self):
         return '%s' % self.wdid
